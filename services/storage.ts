@@ -1,15 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, PlayRecord as ApiPlayRecord, Favorite as ApiFavorite } from "./api";
 import { storageConfig } from "./storageConfig";
-import Logger from '@/utils/Logger';
+import Logger from "@/utils/Logger";
 
-const logger = Logger.withTag('Storage');
+const logger = Logger.withTag("Storage");
 
 // --- Storage Keys ---
 const STORAGE_KEYS = {
   SETTINGS: "mytv_settings",
   PLAYER_SETTINGS: "mytv_player_settings",
   FAVORITES: "mytv_favorites",
+  LIVE_FAVORITES: "mytv_live_favorites",
   PLAY_RECORDS: "mytv_play_records",
   SEARCH_HISTORY: "mytv_search_history",
   LOGIN_CREDENTIALS: "mytv_login_credentials",
@@ -46,6 +47,17 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface LiveFavorite {
+  source: string;
+  channelId: string;
+  tvgId?: string;
+  name: string;
+  logo?: string;
+  group?: string;
+  url?: string;
+  save_time?: number;
+}
+
 // --- Helper ---
 const generateKey = (source: string, id: string) => `${source}+${id}`;
 
@@ -64,13 +76,15 @@ export class PlayerSettingsManager {
   static async get(source: string, id: string): Promise<PlayerSettings | null> {
     const perfStart = performance.now();
     logger.info(`[PERF] PlayerSettingsManager.get START - source: ${source}, id: ${id}`);
-    
+
     const allSettings = await this.getAll();
     const result = allSettings[generateKey(source, id)] || null;
-    
+
     const perfEnd = performance.now();
-    logger.info(`[PERF] PlayerSettingsManager.get END - took ${(perfEnd - perfStart).toFixed(2)}ms, found: ${!!result}`);
-    
+    logger.info(
+      `[PERF] PlayerSettingsManager.get END - took ${(perfEnd - perfStart).toFixed(2)}ms, found: ${!!result}`,
+    );
+
     return result;
   }
 
@@ -78,7 +92,11 @@ export class PlayerSettingsManager {
     const allSettings = await this.getAll();
     const key = generateKey(source, id);
     // Only save if there are actual values to save
-    if (settings.introEndTime !== undefined || settings.outroStartTime !== undefined || settings.playbackRate !== undefined) {
+    if (
+      settings.introEndTime !== undefined ||
+      settings.outroStartTime !== undefined ||
+      settings.playbackRate !== undefined
+    ) {
       allSettings[key] = { ...allSettings[key], ...settings };
     } else {
       // If all are undefined, remove the key
@@ -169,6 +187,55 @@ export class FavoriteManager {
   }
 }
 
+// --- LiveFavoriteManager (Uses AsyncStorage) ---
+export class LiveFavoriteManager {
+  static async getAll(): Promise<Record<string, LiveFavorite>> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.LIVE_FAVORITES);
+      return data ? JSON.parse(data) : {};
+    } catch (error) {
+      logger.info("Failed to get live favorites:", error);
+      return {};
+    }
+  }
+
+  static async getBySource(source: string): Promise<Record<string, LiveFavorite>> {
+    const allFavorites = await this.getAll();
+    return Object.fromEntries(Object.entries(allFavorites).filter(([key]) => key.startsWith(`${source}+`)));
+  }
+
+  static async isFavorited(source: string, channelId: string): Promise<boolean> {
+    const allFavorites = await this.getAll();
+    return !!allFavorites[generateKey(source, channelId)];
+  }
+
+  static async save(source: string, channelId: string, item: Omit<LiveFavorite, "save_time">): Promise<void> {
+    const allFavorites = await this.getAll();
+    allFavorites[generateKey(source, channelId)] = { ...item, save_time: Date.now() };
+    await AsyncStorage.setItem(STORAGE_KEYS.LIVE_FAVORITES, JSON.stringify(allFavorites));
+  }
+
+  static async remove(source: string, channelId: string): Promise<void> {
+    const allFavorites = await this.getAll();
+    delete allFavorites[generateKey(source, channelId)];
+    await AsyncStorage.setItem(STORAGE_KEYS.LIVE_FAVORITES, JSON.stringify(allFavorites));
+  }
+
+  static async toggle(source: string, channelId: string, item: Omit<LiveFavorite, "save_time">): Promise<boolean> {
+    const isFav = await this.isFavorited(source, channelId);
+    if (isFav) {
+      await this.remove(source, channelId);
+      return false;
+    }
+    await this.save(source, channelId, item);
+    return true;
+  }
+
+  static async clearAll(): Promise<void> {
+    await AsyncStorage.removeItem(STORAGE_KEYS.LIVE_FAVORITES);
+  }
+}
+
 // --- PlayRecordManager (Dynamic: API or LocalStorage) ---
 export class PlayRecordManager {
   private static getStorageType() {
@@ -179,7 +246,7 @@ export class PlayRecordManager {
     const perfStart = performance.now();
     const storageType = this.getStorageType();
     logger.info(`[PERF] PlayRecordManager.getAll START - storageType: ${storageType}`);
-    
+
     let apiRecords: Record<string, PlayRecord> = {};
     if (storageType === "localstorage") {
       try {
@@ -192,11 +259,13 @@ export class PlayRecordManager {
     } else {
       const apiStart = performance.now();
       logger.info(`[PERF] API getPlayRecords START`);
-      
+
       apiRecords = await api.getPlayRecords();
-      
+
       const apiEnd = performance.now();
-      logger.info(`[PERF] API getPlayRecords END - took ${(apiEnd - apiStart).toFixed(2)}ms, records: ${Object.keys(apiRecords).length}`);
+      logger.info(
+        `[PERF] API getPlayRecords END - took ${(apiEnd - apiStart).toFixed(2)}ms, records: ${Object.keys(apiRecords).length}`,
+      );
     }
 
     const localSettings = await PlayerSettingsManager.getAll();
@@ -207,10 +276,12 @@ export class PlayRecordManager {
         ...localSettings[key],
       };
     }
-    
+
     const perfEnd = performance.now();
-    logger.info(`[PERF] PlayRecordManager.getAll END - took ${(perfEnd - perfStart).toFixed(2)}ms, total records: ${Object.keys(mergedRecords).length}`);
-    
+    logger.info(
+      `[PERF] PlayRecordManager.getAll END - took ${(perfEnd - perfStart).toFixed(2)}ms, total records: ${Object.keys(mergedRecords).length}`,
+    );
+
     return mergedRecords;
   }
 
@@ -236,13 +307,13 @@ export class PlayRecordManager {
     const key = generateKey(source, id);
     const storageType = this.getStorageType();
     logger.info(`[PERF] PlayRecordManager.get START - source: ${source}, id: ${id}, storageType: ${storageType}`);
-    
+
     const records = await this.getAll();
     const result = records[key] || null;
-    
+
     const perfEnd = performance.now();
     logger.info(`[PERF] PlayRecordManager.get END - took ${(perfEnd - perfStart).toFixed(2)}ms, found: ${!!result}`);
-    
+
     return result;
   }
 

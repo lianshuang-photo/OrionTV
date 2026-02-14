@@ -118,12 +118,31 @@ export class API {
     this.baseURL = url;
   }
 
+  private async buildHeaders(headers?: HeadersInit): Promise<Headers> {
+    const requestHeaders = new Headers(headers);
+    const authCookies = await AsyncStorage.getItem("authCookies");
+    if (authCookies && !requestHeaders.has("Cookie")) {
+      requestHeaders.set("Cookie", authCookies);
+    }
+    return requestHeaders;
+  }
+
   private async _fetch(url: string, options: RequestInit = {}): Promise<Response> {
     if (!this.baseURL) {
       throw new Error("API_URL_NOT_SET");
     }
 
-    const response = await fetch(`${this.baseURL}${url}`, options);
+    const headers = await this.buildHeaders(options.headers);
+
+    const response = await fetch(`${this.baseURL}${url}`, {
+      ...options,
+      headers,
+    });
+
+    const latestCookies = response.headers.get("Set-Cookie");
+    if (latestCookies) {
+      await AsyncStorage.setItem("authCookies", latestCookies);
+    }
 
     if (response.status === 401) {
       throw new Error("UNAUTHORIZED");
@@ -142,12 +161,6 @@ export class API {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-
-    // 存储cookie到AsyncStorage
-    const cookies = response.headers.get("Set-Cookie");
-    if (cookies) {
-      await AsyncStorage.setItem("authCookies", cookies);
-    }
 
     return response.json();
   }

@@ -11,6 +11,9 @@ import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { DeviceUtils } from "@/utils/DeviceUtils";
 import { api, LiveChannel, LiveSource } from "@/services/api";
+import { LiveFavoriteManager } from "@/services/storage";
+
+const FAVORITES_GROUP_NAME = "收藏";
 
 export default function LiveScreen() {
   const { apiBaseUrl } = useSettingsStore();
@@ -27,6 +30,8 @@ export default function LiveScreen() {
   const [groupedChannels, setGroupedChannels] = useState<Record<string, LiveChannel[]>>({});
   const [channelGroups, setChannelGroups] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("");
+  const [favoriteMap, setFavoriteMap] = useState<Record<string, boolean>>({});
+  const [loadError, setLoadError] = useState<string>("");
 
   const [currentChannelIndex, setCurrentChannelIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,39 +39,73 @@ export default function LiveScreen() {
   const [channelTitle, setChannelTitle] = useState<string | null>(null);
   const titleTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const applyChannels = useCallback((nextChannels: LiveChannel[]) => {
-    setChannels(nextChannels);
+  const getChannelFavoriteId = useCallback((channel: LiveChannel) => channel.tvgId || channel.id, []);
 
-    const groups: Record<string, LiveChannel[]> = nextChannels.reduce(
-      (acc, channel) => {
-        const groupName = channel.group || "Other";
-        if (!acc[groupName]) {
-          acc[groupName] = [];
+  const applyChannels = useCallback(
+    (nextChannels: LiveChannel[], sourceKey: string, nextFavoriteMap: Record<string, boolean>) => {
+      setChannels(nextChannels);
+
+      const groups: Record<string, LiveChannel[]> = nextChannels.reduce(
+        (acc, channel) => {
+          const groupName = channel.group || "Other";
+          if (!acc[groupName]) {
+            acc[groupName] = [];
+          }
+          acc[groupName].push(channel);
+          return acc;
+        },
+        {} as Record<string, LiveChannel[]>,
+      );
+
+      const favoriteChannels = nextChannels.filter((channel) => {
+        const favoriteKey = `${sourceKey}+${getChannelFavoriteId(channel)}`;
+        return !!nextFavoriteMap[favoriteKey];
+      });
+      if (favoriteChannels.length > 0) {
+        groups[FAVORITES_GROUP_NAME] = favoriteChannels;
+      }
+
+      const groupNames = Object.keys(groups);
+      if (groups[FAVORITES_GROUP_NAME]) {
+        const index = groupNames.indexOf(FAVORITES_GROUP_NAME);
+        if (index > -1) {
+          groupNames.splice(index, 1);
+          groupNames.unshift(FAVORITES_GROUP_NAME);
         }
-        acc[groupName].push(channel);
-        return acc;
-      },
-      {} as Record<string, LiveChannel[]>,
-    );
+      }
 
-    const groupNames = Object.keys(groups);
-    setGroupedChannels(groups);
-    setChannelGroups(groupNames);
-    setSelectedGroup(groupNames[0] || "");
-    setCurrentChannelIndex(0);
+      setGroupedChannels(groups);
+      setChannelGroups(groupNames);
+      setSelectedGroup((prev) => (groupNames.includes(prev) ? prev : groupNames[0] || ""));
+      setCurrentChannelIndex(0);
 
-    if (nextChannels.length > 0) {
-      showChannelTitle(nextChannels[0].name);
-    } else {
-      setChannelTitle(null);
-    }
-  }, []);
+      if (nextChannels.length > 0) {
+        showChannelTitle(nextChannels[0].name);
+      } else {
+        setChannelTitle(null);
+      }
+    },
+    [getChannelFavoriteId],
+  );
 
   const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
+
+  const handleRefreshCurrentSource = useCallback(() => {
+    if (!selectedSourceKey) {
+      return;
+    }
+
+    setChannelCache((prev) => {
+      const nextCache = { ...prev };
+      delete nextCache[selectedSourceKey];
+      return nextCache;
+    });
+  }, [selectedSourceKey]);
 
   useEffect(() => {
     const loadSources = async () => {
       if (!apiBaseUrl) {
+        setLoadError("请先在设置中配置 MoonTV API 地址");
         setLiveSources([]);
         setSelectedSourceKey("");
         setChannelCache({});
@@ -79,12 +118,14 @@ export default function LiveScreen() {
       }
 
       setIsLoading(true);
+      setLoadError("");
 
       try {
         const sources = await api.getLiveSources();
         setLiveSources(sources);
 
         if (sources.length === 0) {
+          setLoadError("当前没有可用直播源，请先在 MoonTV 后台配置");
           setSelectedSourceKey("");
           setChannels([]);
           setGroupedChannels({});
@@ -100,6 +141,8 @@ export default function LiveScreen() {
           }
           return sources[0].key;
         });
+      } catch {
+        setLoadError("直播源加载失败，请检查网络或登录状态");
       } finally {
         setIsLoading(false);
       }
@@ -114,9 +157,18 @@ export default function LiveScreen() {
         return;
       }
 
+      setLoadError("");
+
+      const sourceFavorites = await LiveFavoriteManager.getBySource(selectedSourceKey);
+      const nextFavoriteMap: Record<string, boolean> = {};
+      Object.keys(sourceFavorites).forEach((key) => {
+        nextFavoriteMap[key] = true;
+      });
+      setFavoriteMap(nextFavoriteMap);
+
       const cachedChannels = channelCache[selectedSourceKey];
       if (cachedChannels) {
-        applyChannels(cachedChannels);
+        applyChannels(cachedChannels, selectedSourceKey, nextFavoriteMap);
         return;
       }
 
@@ -127,7 +179,14 @@ export default function LiveScreen() {
           ...prev,
           [selectedSourceKey]: nextChannels,
         }));
-        applyChannels(nextChannels);
+        applyChannels(nextChannels, selectedSourceKey, nextFavoriteMap);
+      } catch {
+        setLoadError("频道加载失败，请稍后重试");
+        setChannels([]);
+        setGroupedChannels({});
+        setChannelGroups([]);
+        setSelectedGroup("");
+        setCurrentChannelIndex(0);
       } finally {
         setIsLoading(false);
       }
@@ -158,6 +217,35 @@ export default function LiveScreen() {
       setIsChannelListVisible(false);
     }
   };
+
+  const toggleChannelFavorite = useCallback(
+    async (channel: LiveChannel) => {
+      if (!selectedSourceKey) {
+        return;
+      }
+
+      const channelId = getChannelFavoriteId(channel);
+      await LiveFavoriteManager.toggle(selectedSourceKey, channelId, {
+        source: selectedSourceKey,
+        channelId,
+        tvgId: channel.tvgId,
+        name: channel.name,
+        logo: channel.logo,
+        group: channel.group,
+        url: channel.url,
+      });
+
+      const sourceFavorites = await LiveFavoriteManager.getBySource(selectedSourceKey);
+      const nextFavoriteMap: Record<string, boolean> = {};
+      Object.keys(sourceFavorites).forEach((key) => {
+        nextFavoriteMap[key] = true;
+      });
+
+      setFavoriteMap(nextFavoriteMap);
+      applyChannels(channels, selectedSourceKey, nextFavoriteMap);
+    },
+    [selectedSourceKey, getChannelFavoriteId, applyChannels, channels],
+  );
 
   const changeChannel = useCallback(
     (direction: "next" | "prev") => {
@@ -200,6 +288,7 @@ export default function LiveScreen() {
         <View style={dynamicStyles.modalContainer}>
           <View style={dynamicStyles.modalContent}>
             <Text style={dynamicStyles.modalTitle}>选择频道</Text>
+            <Text style={dynamicStyles.modalHint}>按下播放，长按收藏频道</Text>
             <View style={dynamicStyles.sourceContainer}>
               <FlatList
                 data={liveSources}
@@ -215,7 +304,14 @@ export default function LiveScreen() {
                   />
                 )}
               />
+              <StyledButton
+                text="刷新"
+                onPress={handleRefreshCurrentSource}
+                style={dynamicStyles.refreshButton}
+                textStyle={dynamicStyles.refreshButtonText}
+              />
             </View>
+            {!!loadError && <Text style={dynamicStyles.errorText}>{loadError}</Text>}
             <View style={dynamicStyles.listContainer}>
               <View style={dynamicStyles.groupColumn}>
                 <FlatList
@@ -235,14 +331,17 @@ export default function LiveScreen() {
               <View style={dynamicStyles.channelColumn}>
                 {isLoading ? (
                   <ActivityIndicator size="large" />
+                ) : (groupedChannels[selectedGroup] || []).length === 0 ? (
+                  <Text style={dynamicStyles.emptyText}>当前分组暂无频道</Text>
                 ) : (
                   <FlatList
                     data={groupedChannels[selectedGroup] || []}
                     keyExtractor={(item, index) => `${item.id}-${item.group}-${index}`}
                     renderItem={({ item }) => (
                       <StyledButton
-                        text={item.name || "Unknown Channel"}
+                        text={`${favoriteMap[`${selectedSourceKey}+${getChannelFavoriteId(item)}`] ? "★ " : ""}${item.name || "Unknown Channel"}`}
                         onPress={() => handleSelectChannel(item)}
+                        onLongPress={() => toggleChannelFavorite(item)}
                         isSelected={channels[currentChannelIndex]?.id === item.id}
                         hasTVPreferredFocus={channels[currentChannelIndex]?.id === item.id}
                         style={dynamicStyles.channelItem}
@@ -306,6 +405,15 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     },
     sourceContainer: {
       marginBottom: spacing / 2,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    modalHint: {
+      color: "rgba(255, 255, 255, 0.75)",
+      fontSize: isMobile ? 13 : 12,
+      textAlign: "center",
+      marginBottom: spacing / 2,
     },
     sourceButton: {
       marginRight: 8,
@@ -315,6 +423,27 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     },
     sourceButtonText: {
       fontSize: isMobile ? 14 : 12,
+    },
+    refreshButton: {
+      marginLeft: spacing / 2,
+      paddingVertical: isMobile ? minTouchTarget / 5 : 6,
+      paddingHorizontal: spacing / 2,
+      minHeight: isMobile ? minTouchTarget * 0.8 : undefined,
+    },
+    refreshButtonText: {
+      fontSize: isMobile ? 14 : 12,
+    },
+    errorText: {
+      color: "#ff8f8f",
+      fontSize: isMobile ? 13 : 12,
+      marginBottom: spacing / 2,
+      textAlign: "center",
+    },
+    emptyText: {
+      color: "rgba(255, 255, 255, 0.8)",
+      fontSize: isMobile ? 13 : 12,
+      textAlign: "center",
+      marginTop: spacing,
     },
     listContainer: {
       flex: 1,

@@ -58,6 +58,15 @@ export default function DetailScreen() {
     });
   };
 
+  const handleSourcePress = async (item: (typeof searchResults)[number]) => {
+    const isCurrentSource = detail?.source === item.source;
+    await setDetail(item);
+
+    if (isCurrentSource && item.episodes.length > 0) {
+      handlePlay(0);
+    }
+  };
+
   if (loading) {
     return <VideoLoadingAnimation showProgressBar={false} />;
   }
@@ -71,7 +80,7 @@ export default function DetailScreen() {
       </ThemedView>
     );
 
-    if (deviceType === 'tv') {
+    if (deviceType === "tv") {
       return content;
     }
 
@@ -90,7 +99,7 @@ export default function DetailScreen() {
       </ThemedView>
     );
 
-    if (deviceType === 'tv') {
+    if (deviceType === "tv") {
       return content;
     }
 
@@ -106,7 +115,7 @@ export default function DetailScreen() {
   const dynamicStyles = createResponsiveStyles(deviceType, spacing);
 
   const renderDetailContent = () => {
-    if (deviceType === 'mobile') {
+    if (deviceType === "mobile") {
       // 移动端垂直布局
       return (
         <ScrollView style={dynamicStyles.scrollContainer}>
@@ -143,6 +152,13 @@ export default function DetailScreen() {
             <View style={dynamicStyles.sourcesTitleContainer}>
               <ThemedText style={dynamicStyles.sourcesTitle}>播放源 ({searchResults.length})</ThemedText>
               {!allSourcesLoaded && <ActivityIndicator style={{ marginLeft: 10 }} />}
+              <StyledButton
+                text="播放第1集"
+                onPress={() => handlePlay(0)}
+                disabled={detail.episodes.length === 0}
+                style={dynamicStyles.quickPlayButton}
+                textStyle={dynamicStyles.quickPlayButtonText}
+              />
             </View>
             <View style={dynamicStyles.sourceList}>
               {searchResults.map((item, index) => {
@@ -150,7 +166,7 @@ export default function DetailScreen() {
                 return (
                   <StyledButton
                     key={index}
-                    onPress={() => setDetail(item)}
+                    onPress={() => handleSourcePress(item)}
                     isSelected={isSelected}
                     style={dynamicStyles.sourceButton}
                   >
@@ -163,7 +179,13 @@ export default function DetailScreen() {
                       </View>
                     )}
                     {item.resolution && (
-                      <View style={[dynamicStyles.badge, { backgroundColor: "#666" }, isSelected && dynamicStyles.selectedBadge]}>
+                      <View
+                        style={[
+                          dynamicStyles.badge,
+                          { backgroundColor: "#666" },
+                          isSelected && dynamicStyles.selectedBadge,
+                        ]}
+                      >
                         <Text style={dynamicStyles.badgeText}>{item.resolution}</Text>
                       </View>
                     )}
@@ -225,6 +247,13 @@ export default function DetailScreen() {
               <View style={dynamicStyles.sourcesTitleContainer}>
                 <ThemedText style={dynamicStyles.sourcesTitle}>选择播放源 共 {searchResults.length} 个</ThemedText>
                 {!allSourcesLoaded && <ActivityIndicator style={{ marginLeft: 10 }} />}
+                <StyledButton
+                  text="播放第1集"
+                  onPress={() => handlePlay(0)}
+                  disabled={detail.episodes.length === 0}
+                  style={dynamicStyles.quickPlayButton}
+                  textStyle={dynamicStyles.quickPlayButtonText}
+                />
               </View>
               <View style={dynamicStyles.sourceList}>
                 {searchResults.map((item, index) => {
@@ -232,7 +261,7 @@ export default function DetailScreen() {
                   return (
                     <StyledButton
                       key={index}
-                      onPress={() => setDetail(item)}
+                      onPress={() => handleSourcePress(item)}
                       hasTVPreferredFocus={index === 0}
                       isSelected={isSelected}
                       style={dynamicStyles.sourceButton}
@@ -246,7 +275,13 @@ export default function DetailScreen() {
                         </View>
                       )}
                       {item.resolution && (
-                        <View style={[dynamicStyles.badge, { backgroundColor: "#666" }, isSelected && dynamicStyles.selectedBadge]}>
+                        <View
+                          style={[
+                            dynamicStyles.badge,
+                            { backgroundColor: "#666" },
+                            isSelected && dynamicStyles.selectedBadge,
+                          ]}
+                        >
                           <Text style={dynamicStyles.badgeText}>{item.resolution}</Text>
                         </View>
                       )}
@@ -276,13 +311,13 @@ export default function DetailScreen() {
   };
 
   const content = (
-    <ThemedView style={[commonStyles.container, { paddingTop: deviceType === 'tv' ? 40 : 0 }]}>
+    <ThemedView style={[commonStyles.container, { paddingTop: deviceType === "tv" ? 40 : 0 }]}>
       {renderDetailContent()}
     </ThemedView>
   );
 
   // 根据设备类型决定是否包装在响应式导航中
-  if (deviceType === 'tv') {
+  if (deviceType === "tv") {
     return content;
   }
 
@@ -295,15 +330,15 @@ export default function DetailScreen() {
 }
 
 const createResponsiveStyles = (deviceType: string, spacing: number) => {
-  const isTV = deviceType === 'tv';
-  const isTablet = deviceType === 'tablet';
-  const isMobile = deviceType === 'mobile';
+  const isTV = deviceType === "tv";
+  const isTablet = deviceType === "tablet";
+  const isMobile = deviceType === "mobile";
 
   return StyleSheet.create({
     scrollContainer: {
       flex: 1,
     },
-    
+
     // 移动端专用样式
     mobileTopContainer: {
       paddingHorizontal: spacing,
@@ -311,10 +346,10 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
       paddingBottom: spacing / 2,
     },
     mobilePoster: {
-      width: '100%',
+      width: "100%",
       height: 280,
       borderRadius: 8,
-      alignSelf: 'center',
+      alignSelf: "center",
       marginBottom: spacing,
     },
     mobileInfoContainer: {
@@ -355,7 +390,7 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
       fontSize: isMobile ? 20 : isTablet ? 24 : 28,
       fontWeight: "bold",
       flexShrink: 1,
-      color: 'white',
+      color: "white",
     },
     favoriteButton: {
       padding: 10,
@@ -387,12 +422,13 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     sourcesTitleContainer: {
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "space-between",
       marginBottom: spacing / 2,
     },
     sourcesTitle: {
       fontSize: isMobile ? 16 : isTablet ? 18 : 20,
       fontWeight: "bold",
-      color: 'white',
+      color: "white",
     },
     sourceList: {
       flexDirection: "row",
@@ -405,6 +441,16 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     sourceButtonText: {
       color: "white",
       fontSize: isMobile ? 14 : 16,
+    },
+    quickPlayButton: {
+      marginLeft: spacing / 2,
+      minHeight: isMobile ? 34 : 40,
+      paddingHorizontal: isMobile ? 10 : 12,
+      paddingVertical: isMobile ? 6 : 8,
+    },
+    quickPlayButtonText: {
+      fontSize: isMobile ? 12 : 14,
+      color: "white",
     },
     badge: {
       backgroundColor: "#666",
@@ -431,7 +477,7 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
       fontSize: isMobile ? 16 : isTablet ? 18 : 20,
       fontWeight: "bold",
       marginBottom: spacing / 2,
-      color: 'white',
+      color: "white",
     },
     episodeList: {
       flexDirection: "row",
