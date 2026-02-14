@@ -34,16 +34,14 @@
     "experiments": {
       "typedRoutes": true
     },
-    "name": "OrionTV",
-    "slug": "OrionTV",
+    "name": "OrionTV LS",
+    "slug": "oriontv-ls",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "android": {
-      "package": "com.oriontv",
+      "package": "com.lianshuang.oriontv",
       "usesCleartextTraffic": true,
       "hardwareAcceleration": true,
       "networkSecurityConfig": "@xml/network_security_config",
@@ -59,18 +57,15 @@
           "action": "android.intent.action.VIEW",
           "data": [
             {
-              "scheme": "oriontv"
+              "scheme": "oriontvls"
             }
           ],
-          "category": [
-            "android.intent.category.BROWSABLE",
-            "android.intent.category.DEFAULT"
-          ]
+          "category": ["android.intent.category.BROWSABLE", "android.intent.category.DEFAULT"]
         }
       ]
     },
     "ios": {
-      "bundleIdentifier": "com.oriontv",
+      "bundleIdentifier": "com.lianshuang.oriontv",
       "supportsTablet": true,
       "requireFullScreen": false,
       "supportedInterfaceOrientations": [
@@ -83,7 +78,7 @@
         "usesNonExemptEncryption": false
       }
     },
-    "scheme": "oriontv",
+    "scheme": "oriontvls",
     "extra": {
       "router": {
         "origin": false
