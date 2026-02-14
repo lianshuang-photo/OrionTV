@@ -10,7 +10,6 @@ import { useSettingsStore } from "@/stores/settingsStore";
 // import useAuthStore from "@/stores/authStore";
 import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import { APIConfigSection } from "@/components/settings/APIConfigSection";
-import { LiveStreamSection } from "@/components/settings/LiveStreamSection";
 import { RemoteInputSection } from "@/components/settings/RemoteInputSection";
 import { UpdateSection } from "@/components/settings/UpdateSection";
 // import { VideoSourceSection } from "@/components/settings/VideoSourceSection";
@@ -20,7 +19,7 @@ import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { DeviceUtils } from "@/utils/DeviceUtils";
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
 type SectionItem = {
   component: React.ReactElement;
@@ -28,14 +27,12 @@ type SectionItem = {
 };
 
 /** 过滤掉 false/undefined，帮 TypeScript 推断出真正的数组元素类型 */
-function isSectionItem(
-  item: false | undefined | SectionItem
-): item is SectionItem {
+function isSectionItem(item: false | undefined | SectionItem): item is SectionItem {
   return !!item;
 }
 
 export default function SettingsScreen() {
-  const { loadSettings, saveSettings, setApiBaseUrl, setM3uUrl } = useSettingsStore();
+  const { loadSettings, saveSettings, setApiBaseUrl } = useSettingsStore();
   const { lastMessage, targetPage, clearMessage } = useRemoteControlStore();
   const backgroundColor = useThemeColor({}, "background");
   const insets = useSafeAreaInsets();
@@ -52,7 +49,6 @@ export default function SettingsScreen() {
 
   const saveButtonRef = useRef<any>(null);
   const apiSectionRef = useRef<any>(null);
-  const liveStreamSectionRef = useRef<any>(null);
 
   useEffect(() => {
     loadSettings();
@@ -73,9 +69,6 @@ export default function SettingsScreen() {
     if (currentSection === "api" && apiSectionRef.current) {
       // API Config Section
       setApiBaseUrl(message);
-    } else if (currentSection === "livestream" && liveStreamSectionRef.current) {
-      // Live Stream Section
-      setM3uUrl(message);
     }
   };
 
@@ -185,19 +178,6 @@ export default function SettingsScreen() {
       ),
       key: "api",
     },
-    deviceType !== "mobile" && {
-      component: (
-        <LiveStreamSection
-          ref={liveStreamSectionRef}
-          onChanged={markAsChanged}
-          onFocus={() => {
-            setCurrentFocusIndex(2);
-            setCurrentSection("livestream");
-          }}
-        />
-      ),
-      key: "livestream",
-    },
     Platform.OS === "android" && {
       component: <UpdateSection />,
       key: "update",
@@ -205,7 +185,6 @@ export default function SettingsScreen() {
   ] as const; // 把每个对象都当作字面量保留
   /** 这里得到的 sections 已经是 SectionItem[]（没有 false） */
   const sections: SectionItem[] = rawSections.filter(isSectionItem);
-
 
   // TV遥控器事件处理 - 仅在TV设备上启用
   const handleTVEvent = React.useCallback(
@@ -223,10 +202,10 @@ export default function SettingsScreen() {
         setCurrentFocusIndex(prevIndex);
       }
     },
-    [currentFocusIndex, sections.length, deviceType]
+    [currentFocusIndex, sections.length, deviceType],
   );
 
-  useTVEventHandler(deviceType === "tv" ? handleTVEvent : () => { });
+  useTVEventHandler(deviceType === "tv" ? handleTVEvent : () => {});
 
   // 动态样式
   const dynamicStyles = createResponsiveStyles(deviceType, spacing, insets);
@@ -241,7 +220,6 @@ export default function SettingsScreen() {
       scrollEnabled={true}
       style={{ flex: 1, backgroundColor }}
     >
-
       <ThemedView style={[commonStyles.container, dynamicStyles.container]}>
         {deviceType === "tv" && (
           <View style={dynamicStyles.header}>
@@ -264,7 +242,7 @@ export default function SettingsScreen() {
           />
         </View> */}
         <View style={dynamicStyles.scrollView}>
-          {sections.map(item => (
+          {sections.map((item) => (
             // 必须把 key 放在最外层的 View 上
             <View key={item.key} style={dynamicStyles.itemWrapper}>
               {item.component}
@@ -342,7 +320,7 @@ const createResponsiveStyles = (deviceType: string, spacing: number, insets: any
       opacity: 0.5,
     },
     itemWrapper: {
-      marginBottom: spacing,   // 这里的 spacing 来自 useResponsiveLayout()
+      marginBottom: spacing, // 这里的 spacing 来自 useResponsiveLayout()
     },
   });
 };

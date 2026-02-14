@@ -75,6 +75,36 @@ export interface ServerConfig {
   StorageType: "localstorage" | "redis" | string;
 }
 
+export interface LiveSource {
+  key: string;
+  name: string;
+  url: string;
+  epg?: string;
+  ua?: string;
+  disabled?: boolean;
+}
+
+export interface LiveChannel {
+  id: string;
+  tvgId: string;
+  name: string;
+  logo: string;
+  group: string;
+  url: string;
+}
+
+export interface LiveEpgProgram {
+  title?: string;
+  start?: string;
+  end?: string;
+  [key: string]: unknown;
+}
+
+interface LiveApiResponse<T> {
+  success: boolean;
+  data: T;
+}
+
 export class API {
   public baseURL: string = "";
 
@@ -126,13 +156,33 @@ export class API {
     const response = await this._fetch("/api/logout", {
       method: "POST",
     });
-    await AsyncStorage.setItem("authCookies", '');
+    await AsyncStorage.setItem("authCookies", "");
     return response.json();
   }
 
   async getServerConfig(): Promise<ServerConfig> {
     const response = await this._fetch("/api/server-config");
     return response.json();
+  }
+
+  async getLiveSources(): Promise<LiveSource[]> {
+    const response = await this._fetch("/api/live/sources");
+    const payload: LiveApiResponse<LiveSource[]> = await response.json();
+    return payload.data || [];
+  }
+
+  async getLiveChannels(source: string): Promise<LiveChannel[]> {
+    const response = await this._fetch(`/api/live/channels?source=${encodeURIComponent(source)}`);
+    const payload: LiveApiResponse<LiveChannel[]> = await response.json();
+    return payload.data || [];
+  }
+
+  async getLiveEpg(source: string, tvgId: string): Promise<LiveEpgProgram[]> {
+    const response = await this._fetch(
+      `/api/live/epg?source=${encodeURIComponent(source)}&tvgId=${encodeURIComponent(tvgId)}`,
+    );
+    const payload: LiveApiResponse<{ programs?: LiveEpgProgram[] }> = await response.json();
+    return payload.data?.programs || [];
   }
 
   async getFavorites(key?: string): Promise<Record<string, Favorite> | Favorite | null> {
@@ -204,7 +254,7 @@ export class API {
     type: "movie" | "tv",
     tag: string,
     pageSize: number = 16,
-    pageStart: number = 0
+    pageStart: number = 0,
   ): Promise<DoubanResponse> {
     const url = `/api/douban?type=${type}&tag=${encodeURIComponent(tag)}&pageSize=${pageSize}&pageStart=${pageStart}`;
     const response = await this._fetch(url);
@@ -221,7 +271,7 @@ export class API {
     const url = `/api/search/one?q=${encodeURIComponent(query)}&resourceId=${encodeURIComponent(resourceId)}`;
     const response = await this._fetch(url, { signal });
     const { results } = await response.json();
-    return { results: results.filter((item: any) => item.title === query )};
+    return { results: results.filter((item: any) => item.title === query) };
   }
 
   async getResources(signal?: AbortSignal): Promise<ApiSite[]> {
