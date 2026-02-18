@@ -94,6 +94,17 @@ export default function LiveScreen() {
   const selectedChannelAdFilteredUrl = currentChannel
     ? getAdFilteredLiveUrl(currentChannel.url, apiBaseUrl, selectedSourceKey)
     : null;
+  const preferDirectFirst = deviceType === "tv";
+  const primaryStreamUrl = preferDirectFirst
+    ? selectedChannelUrl || selectedChannelAdFilteredUrl
+    : selectedChannelAdFilteredUrl || selectedChannelUrl;
+  const fallbackStreamUrl = preferDirectFirst
+    ? selectedChannelUrl && selectedChannelAdFilteredUrl
+      ? selectedChannelAdFilteredUrl
+      : null
+    : selectedChannelAdFilteredUrl
+    ? selectedChannelUrl
+    : null;
 
   const handleRefreshCurrentSource = useCallback(() => {
     if (!selectedSourceKey) {
@@ -319,12 +330,22 @@ export default function LiveScreen() {
   const renderLiveContent = () => (
     <>
       <LivePlayer
-        streamUrl={selectedChannelAdFilteredUrl || selectedChannelUrl}
-        fallbackStreamUrl={selectedChannelAdFilteredUrl ? selectedChannelUrl : null}
+        streamUrl={primaryStreamUrl}
+        fallbackStreamUrl={fallbackStreamUrl}
         channelTitle={channelTitle}
         onPlaybackStatusUpdate={handlePlayerPlaybackStatusUpdate}
         onPlaybackFailure={handlePlayerPlaybackFailure}
       />
+      {deviceType !== "tv" && (
+        <View style={dynamicStyles.mobileActionBar}>
+          <StyledButton
+            text="频道列表"
+            onPress={() => setIsChannelListVisible(true)}
+            style={dynamicStyles.mobileActionButton}
+            textStyle={dynamicStyles.mobileActionButtonText}
+          />
+        </View>
+      )}
       <Modal
         animationType="slide"
         transparent={true}
@@ -523,6 +544,24 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     },
     channelItemText: {
       fontSize: isMobile ? 14 : 12,
+    },
+    mobileActionBar: {
+      position: "absolute",
+      top: spacing,
+      right: spacing,
+      zIndex: 20,
+    },
+    mobileActionButton: {
+      paddingHorizontal: spacing,
+      paddingVertical: isMobile ? minTouchTarget / 5 : 8,
+      minHeight: isMobile ? minTouchTarget * 0.8 : undefined,
+      backgroundColor: "rgba(0, 0, 0, 0.72)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 255, 255, 0.2)",
+    },
+    mobileActionButtonText: {
+      color: "#ffffff",
+      fontSize: isMobile ? 13 : 12,
     },
   });
 };
