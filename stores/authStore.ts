@@ -2,7 +2,6 @@ import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "@/services/api";
 import { useSettingsStore } from "./settingsStore";
-import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
 import { LoginCredentialsManager } from "@/services/storage";
 
@@ -69,6 +68,7 @@ const useAuthStore = create<AuthState>((set) => ({
       return;
     }
 
+    api.setBaseUrl(apiBaseUrl);
     set({ isLoginModalVisible: false });
 
     try {
@@ -105,7 +105,6 @@ const useAuthStore = create<AuthState>((set) => ({
       if (storageType === "localstorage") {
         set({ isLoggedIn: false, isLoginModalVisible: false });
       } else {
-        Toast.show({ type: "error", text1: "请登录后继续使用" });
         set({ isLoggedIn: false, isLoginModalVisible: true });
       }
     } catch (error) {

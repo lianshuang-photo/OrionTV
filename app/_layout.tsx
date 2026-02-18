@@ -3,6 +3,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
+import { useState } from "react";
 import { Platform, View, StyleSheet } from "react-native";
 import Toast from "react-native-toast-message";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -34,23 +35,25 @@ export default function RootLayout() {
   const { checkForUpdate, lastCheckTime } = useUpdateStore();
   const responsiveConfig = useResponsiveLayout();
   const hasTriggeredCronRef = useRef(false);
+  const [isSettingsReady, setIsSettingsReady] = useState(false);
 
   useEffect(() => {
     const initializeApp = async () => {
       await loadSettings();
+      setIsSettingsReady(true);
     };
     initializeApp();
     initUpdateStore(); // 初始化更新存储
   }, [loadSettings]);
 
   useEffect(() => {
-    if (apiBaseUrl) {
+    if (isSettingsReady && apiBaseUrl) {
       checkLoginStatus(apiBaseUrl);
     }
-  }, [apiBaseUrl, checkLoginStatus]);
+  }, [apiBaseUrl, checkLoginStatus, isSettingsReady]);
 
   useEffect(() => {
-    if (!apiBaseUrl || !cronPassword || hasTriggeredCronRef.current) {
+    if (!isSettingsReady || !apiBaseUrl || !cronPassword || hasTriggeredCronRef.current) {
       return;
     }
 
@@ -58,7 +61,7 @@ export default function RootLayout() {
     api.triggerCron(cronPassword).catch((error) => {
       logger.warn(`Startup cron refresh skipped: ${error}`);
     });
-  }, [apiBaseUrl, cronPassword]);
+  }, [apiBaseUrl, cronPassword, isSettingsReady]);
 
   useEffect(() => {
     if (loaded || error) {
