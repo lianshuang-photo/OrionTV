@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, FlatList, StyleSheet, ActivityIndicator, Modal, useTVEventHandler, HWEvent, Text } from "react-native";
 import LivePlayer from "@/components/LivePlayer";
-import { getPlayableUrl } from "@/services/m3u";
+import { getAdFilteredLiveUrl, getPlayableUrl } from "@/services/m3u";
 import { ThemedView } from "@/components/ThemedView";
 import { StyledButton } from "@/components/StyledButton";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -90,7 +90,11 @@ export default function LiveScreen() {
     [getChannelFavoriteId],
   );
 
-  const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
+  const currentChannel = channels[currentChannelIndex];
+  const selectedChannelUrl = currentChannel ? getPlayableUrl(currentChannel.url) : null;
+  const selectedChannelAdFilteredUrl = currentChannel
+    ? getAdFilteredLiveUrl(currentChannel.url, apiBaseUrl, selectedSourceKey)
+    : null;
 
   const handleRefreshCurrentSource = useCallback(() => {
     if (!selectedSourceKey) {
@@ -303,7 +307,12 @@ export default function LiveScreen() {
 
   const renderLiveContent = () => (
     <>
-      <LivePlayer streamUrl={selectedChannelUrl} channelTitle={channelTitle} onPlaybackStatusUpdate={() => {}} />
+      <LivePlayer
+        streamUrl={selectedChannelAdFilteredUrl || selectedChannelUrl}
+        fallbackStreamUrl={selectedChannelAdFilteredUrl ? selectedChannelUrl : null}
+        channelTitle={channelTitle}
+        onPlaybackStatusUpdate={() => {}}
+      />
       <Modal
         animationType="slide"
         transparent={true}

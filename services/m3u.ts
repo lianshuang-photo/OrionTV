@@ -74,3 +74,31 @@ export const getPlayableUrl = (originalUrl: string | null): string | null => {
   }
   return originalUrl;
 };
+
+export const isHttpLiveUrl = (url: string | null): boolean => {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+};
+
+export const isM3u8LiveUrl = (url: string | null): boolean => {
+  if (!url) return false;
+  return /\.m3u8($|\?)/i.test(url);
+};
+
+export const getAdFilteredLiveUrl = (
+  originalUrl: string | null,
+  apiBaseUrl: string,
+  sourceKey: string,
+  proxyToken?: string,
+): string | null => {
+  if (!originalUrl || !apiBaseUrl || !sourceKey) {
+    return null;
+  }
+
+  if (!isHttpLiveUrl(originalUrl) || !isM3u8LiveUrl(originalUrl)) {
+    return null;
+  }
+
+  const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : "";
+  return `${apiBaseUrl}/api/proxy-m3u8?url=${encodeURIComponent(originalUrl)}&source=${encodeURIComponent(sourceKey)}${tokenParam}`;
+};

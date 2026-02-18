@@ -1,22 +1,68 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { View, StyleSheet, Text, ActivityIndicator } from "react-native";
 import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
 
 interface LivePlayerProps {
   streamUrl: string | null;
+  fallbackStreamUrl?: string | null;
   channelTitle?: string | null;
   onPlaybackStatusUpdate: (status: AVPlaybackStatus) => void;
 }
 
 const PLAYBACK_TIMEOUT = 15000; // 15 seconds
 
-export default function LivePlayer({ streamUrl, channelTitle, onPlaybackStatusUpdate }: LivePlayerProps) {
+export default function LivePlayer({
+  streamUrl,
+  fallbackStreamUrl = null,
+  channelTitle,
+  onPlaybackStatusUpdate,
+}: LivePlayerProps) {
   const video = useRef<Video>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isTimeout, setIsTimeout] = useState(false);
+  const [activeStreamUrl, setActiveStreamUrl] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasSwitchedRef = useRef(false);
+  const fallbackStreamUrlRef = useRef<string | null>(null);
   useKeepAwake();
+
+  const startTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    timeoutRef.current = setTimeout(() => {
+      if (!hasSwitchedRef.current && fallbackStreamUrlRef.current) {
+        hasSwitchedRef.current = true;
+        setHasSwitchedToFallback(true);
+        setActiveStreamUrl(fallbackStreamUrlRef.current);
+        setStatusMessage("去广告线路失败，已切换直连...");
+        setIsLoading(true);
+        setIsTimeout(false);
+        startTimeout();
+        return;
+      }
+
+      setIsTimeout(true);
+      setIsLoading(false);
+      setStatusMessage(null);
+    }, PLAYBACK_TIMEOUT);
+  }, []);
+
+  const switchToFallback = useCallback(() => {
+    if (!hasSwitchedRef.current && fallbackStreamUrlRef.current) {
+      hasSwitchedRef.current = true;
+      setActiveStreamUrl(fallbackStreamUrlRef.current);
+      setStatusMessage("去广告线路失败，已切换直连...");
+      setIsLoading(true);
+      setIsTimeout(false);
+      startTimeout();
+      return true;
+    }
+    return false;
+  }, [startTimeout]);
 
   useEffect(() => {
     if (timeoutRef.current) {
@@ -24,15 +70,20 @@ export default function LivePlayer({ streamUrl, channelTitle, onPlaybackStatusUp
     }
 
     if (streamUrl) {
+      fallbackStreamUrlRef.current = fallbackStreamUrl;
+      hasSwitchedRef.current = false;
+      setActiveStreamUrl(streamUrl);
       setIsLoading(true);
       setIsTimeout(false);
-      timeoutRef.current = setTimeout(() => {
-        setIsTimeout(true);
-        setIsLoading(false);
-      }, PLAYBACK_TIMEOUT);
+      setStatusMessage(null);
+      startTimeout();
     } else {
+      fallbackStreamUrlRef.current = null;
+      hasSwitchedRef.current = false;
+      setActiveStreamUrl(null);
       setIsLoading(false);
       setIsTimeout(false);
+      setStatusMessage(null);
     }
 
     return () => {
@@ -40,7 +91,7 @@ export default function LivePlayer({ streamUrl, channelTitle, onPlaybackStatusUp
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [streamUrl]);
+  }, [streamUrl, fallbackStreamUrl, startTimeout]);
 
   const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
@@ -50,22 +101,26 @@ export default function LivePlayer({ streamUrl, channelTitle, onPlaybackStatusUp
         }
         setIsLoading(false);
         setIsTimeout(false);
+        setStatusMessage(hasSwitchedRef.current ? "当前为直连线路" : null);
       } else if (status.isBuffering) {
         setIsLoading(true);
       }
     } else {
       if (status.error) {
-        setIsLoading(false);
-        setIsTimeout(true);
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
+        if (!switchToFallback()) {
+          setIsLoading(false);
+          setIsTimeout(true);
+          setStatusMessage(null);
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+          }
         }
       }
     }
     onPlaybackStatusUpdate(status);
   };
 
-  if (!streamUrl) {
+  if (!activeStreamUrl) {
     return (
       <View style={styles.container}>
         <Text style={styles.messageText}>按向下键选择频道</Text>
@@ -87,20 +142,28 @@ export default function LivePlayer({ streamUrl, channelTitle, onPlaybackStatusUp
         ref={video}
         style={styles.video}
         source={{
-          uri: streamUrl,
+          uri: activeStreamUrl,
         }}
         resizeMode={ResizeMode.CONTAIN}
         shouldPlay
         onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
         onError={(e) => {
-          setIsTimeout(true);
-          setIsLoading(false);
+          if (!switchToFallback()) {
+            setIsTimeout(true);
+            setIsLoading(false);
+            setStatusMessage(null);
+          }
         }}
       />
       {isLoading && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.messageText}>加载中...</Text>
+          <Text style={styles.messageText}>{statusMessage || "加载中..."}</Text>
+        </View>
+      )}
+      {statusMessage && !isLoading && !isTimeout && (
+        <View style={styles.statusOverlay}>
+          <Text style={styles.statusText}>{statusMessage}</Text>
         </View>
       )}
       {channelTitle && !isLoading && !isTimeout && (
@@ -145,5 +208,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  statusOverlay: {
+    position: "absolute",
+    bottom: 24,
+    left: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  statusText: {
+    color: "#cceeff",
+    fontSize: 12,
   },
 });
