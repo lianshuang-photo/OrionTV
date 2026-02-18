@@ -15,6 +15,8 @@ import { LiveFavoriteManager } from "@/services/storage";
 
 const FAVORITES_GROUP_NAME = "收藏";
 
+const isSupportedLiveUrl = (url: string) => /^https?:\/\//i.test(url || "");
+
 export default function LiveScreen() {
   const { apiBaseUrl } = useSettingsStore();
 
@@ -88,8 +90,7 @@ export default function LiveScreen() {
     [getChannelFavoriteId],
   );
 
-  const selectedChannelUrl =
-    channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url, selectedSourceKey) : null;
+  const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
 
   const handleRefreshCurrentSource = useCallback(() => {
     if (!selectedSourceKey) {
@@ -136,12 +137,29 @@ export default function LiveScreen() {
           return;
         }
 
-        setSelectedSourceKey((prev) => {
-          if (prev && sources.some((source) => source.key === prev)) {
-            return prev;
+        const preloadedCache: Record<string, LiveChannel[]> = {};
+        let firstPlayableSourceKey = sources[0].key;
+
+        for (const source of sources) {
+          try {
+            const sourceChannels = await api.getLiveChannels(source.key);
+            const supportedChannels = sourceChannels.filter((channel) => isSupportedLiveUrl(channel.url));
+            preloadedCache[source.key] = supportedChannels;
+
+            if (supportedChannels.length > 0) {
+              firstPlayableSourceKey = source.key;
+              break;
+            }
+          } catch {
+            preloadedCache[source.key] = [];
           }
-          return sources[0].key;
-        });
+        }
+
+        setChannelCache((prev) => ({
+          ...prev,
+          ...preloadedCache,
+        }));
+        setSelectedSourceKey(firstPlayableSourceKey);
       } catch {
         setLoadError("直播源加载失败，请检查网络或登录状态");
       } finally {
@@ -175,11 +193,17 @@ export default function LiveScreen() {
 
       setIsLoading(true);
       try {
-        const nextChannels = await api.getLiveChannels(selectedSourceKey);
+        const sourceChannels = await api.getLiveChannels(selectedSourceKey);
+        const nextChannels = sourceChannels.filter((channel) => isSupportedLiveUrl(channel.url));
         setChannelCache((prev) => ({
           ...prev,
           [selectedSourceKey]: nextChannels,
         }));
+
+        if (sourceChannels.length > 0 && nextChannels.length === 0) {
+          setLoadError("当前源为组播/非HTTP链接，设备不支持，请切换其他直播源");
+        }
+
         applyChannels(nextChannels, selectedSourceKey, nextFavoriteMap);
       } catch {
         setLoadError("频道加载失败，请稍后重试");

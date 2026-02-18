@@ -1,5 +1,4 @@
 import Logger from "@/utils/Logger";
-import { api } from "@/services/api";
 
 const logger = Logger.withTag("M3U");
 
@@ -69,16 +68,9 @@ export const fetchAndParseM3u = async (m3uUrl: string): Promise<Channel[]> => {
   }
 };
 
-export const getPlayableUrl = (originalUrl: string | null, source?: string): string | null => {
+export const getPlayableUrl = (originalUrl: string | null): string | null => {
   if (!originalUrl) {
     return null;
   }
-
-  const isM3u8Url = /\.m3u8($|\?)/i.test(originalUrl);
-  if (isM3u8Url && api.baseURL) {
-    const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
-    return `${api.baseURL}/api/proxy-m3u8?url=${encodeURIComponent(originalUrl)}${sourceParam}`;
-  }
-
   return originalUrl;
 };

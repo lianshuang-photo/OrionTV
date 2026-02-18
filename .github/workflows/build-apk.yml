@@ -27,6 +27,13 @@ jobs:
         id: package-version
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Build release metadata
+        id: release-meta
+        run: |
+          echo "tag=v${{ steps.package-version.outputs.version }}-build.${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "name=Release v${{ steps.package-version.outputs.version }} (build ${{ github.run_number }})" >> $GITHUB_OUTPUT
+          echo "apk_name=orionTV.${{ steps.package-version.outputs.version }}.build.${{ github.run_number }}.apk" >> $GITHUB_OUTPUT
+
       - name: Setup JDK
         uses: actions/setup-java@v3
         with:
@@ -42,16 +49,16 @@ jobs:
       - name: Rename APK file
         run: |
           mkdir -p artifacts
-          cp android/app/build/outputs/apk/release/app-release.apk artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk
+          cp android/app/build/outputs/apk/release/app-release.apk artifacts/${{ steps.release-meta.outputs.apk_name }}
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.package-version.outputs.version }}
-          name: Release v${{ steps.package-version.outputs.version }}
-          body: Automated release for version v${{ steps.package-version.outputs.version }}.
+          tag_name: ${{ steps.release-meta.outputs.tag }}
+          name: ${{ steps.release-meta.outputs.name }}
+          body: Automated release for version v${{ steps.package-version.outputs.version }} (build ${{ github.run_number }}).
           draft: false
           prerelease: false
-          files: artifacts/orionTV.${{ steps.package-version.outputs.version }}.apk
+          files: artifacts/${{ steps.release-meta.outputs.apk_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
