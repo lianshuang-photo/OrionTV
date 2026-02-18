@@ -32,6 +32,7 @@ export interface PlayerSettings {
 
 export interface AppSettings {
   apiBaseUrl: string;
+  cronPassword?: string;
   remoteInputEnabled: boolean;
   videoSource: {
     enabledAll: boolean;
@@ -387,6 +388,7 @@ export class SettingsManager {
   static async get(): Promise<AppSettings> {
     const defaultSettings: AppSettings = {
       apiBaseUrl: "",
+      cronPassword: "cron_secure_password",
       remoteInputEnabled: true,
       videoSource: {
         enabledAll: true,

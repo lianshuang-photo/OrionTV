@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Platform, View, StyleSheet } from "react-native";
 import Toast from "react-native-toast-message";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,9 +15,10 @@ import { useUpdateStore, initUpdateStore } from "@/stores/updateStore";
 import { UpdateModal } from "@/components/UpdateModal";
 import { UPDATE_CONFIG } from "@/constants/UpdateConfig";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import Logger from '@/utils/Logger';
+import Logger from "@/utils/Logger";
+import { api } from "@/services/api";
 
-const logger = Logger.withTag('RootLayout');
+const logger = Logger.withTag("RootLayout");
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -27,11 +28,12 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
-  const { loadSettings, remoteInputEnabled, apiBaseUrl } = useSettingsStore();
+  const { loadSettings, remoteInputEnabled, apiBaseUrl, cronPassword } = useSettingsStore();
   const { startServer, stopServer } = useRemoteControlStore();
   const { checkLoginStatus } = useAuthStore();
   const { checkForUpdate, lastCheckTime } = useUpdateStore();
   const responsiveConfig = useResponsiveLayout();
+  const hasTriggeredCronRef = useRef(false);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -48,6 +50,17 @@ export default function RootLayout() {
   }, [apiBaseUrl, checkLoginStatus]);
 
   useEffect(() => {
+    if (!apiBaseUrl || !cronPassword || hasTriggeredCronRef.current) {
+      return;
+    }
+
+    hasTriggeredCronRef.current = true;
+    api.triggerCron(cronPassword).catch((error) => {
+      logger.warn(`Startup cron refresh skipped: ${error}`);
+    });
+  }, [apiBaseUrl, cronPassword]);
+
+  useEffect(() => {
     if (loaded || error) {
       SplashScreen.hideAsync();
       if (error) {
@@ -58,7 +71,7 @@ export default function RootLayout() {
 
   // 检查更新
   useEffect(() => {
-    if (loaded && UPDATE_CONFIG.AUTO_CHECK && Platform.OS === 'android') {
+    if (loaded && UPDATE_CONFIG.AUTO_CHECK && Platform.OS === "android") {
       // 检查是否需要自动检查更新
       const shouldCheck = Date.now() - lastCheckTime > UPDATE_CONFIG.CHECK_INTERVAL;
       if (shouldCheck) {

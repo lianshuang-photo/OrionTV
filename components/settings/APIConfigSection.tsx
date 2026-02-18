@@ -23,7 +23,7 @@ export interface APIConfigSectionRef {
 
 export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSectionProps>(
   ({ onChanged, onFocus, onBlur, onPress, hideDescription = false }, ref) => {
-    const { apiBaseUrl, setApiBaseUrl, remoteInputEnabled } = useSettingsStore();
+    const { apiBaseUrl, cronPassword, setApiBaseUrl, setCronPassword, remoteInputEnabled } = useSettingsStore();
     const { serverUrl } = useRemoteControlStore();
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [isSectionFocused, setIsSectionFocused] = useState(false);
@@ -33,6 +33,11 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
 
     const handleUrlChange = (url: string) => {
       setApiBaseUrl(url);
+      onChanged();
+    };
+
+    const handleCronPasswordChange = (value: string) => {
+      setCronPassword(value);
       onChanged();
     };
 
@@ -60,13 +65,13 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
           inputRef.current?.focus();
         }
       },
-      [isSectionFocused]
+      [isSectionFocused],
     );
 
     const handlePress = () => {
       inputRef.current?.focus();
       onPress?.();
-    }
+    };
 
     useTVEventHandler(handleTVEvent);
 
@@ -75,15 +80,16 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
       end: 0,
     });
     // 当用户手动移动光标或选中文本时，同步到 state（可选）
-    const onSelectionChange = ({
-      nativeEvent: { selection },
-    }: any) => {
+    const onSelectionChange = ({ nativeEvent: { selection } }: any) => {
       setSelection(selection);
     };
 
     return (
-      <SettingsSection focusable onFocus={handleSectionFocus} onBlur={handleSectionBlur}
-        {...Platform.isTV || deviceType !== 'tv' ? undefined : { onPress: handlePress }}
+      <SettingsSection
+        focusable
+        onFocus={handleSectionFocus}
+        onBlur={handleSectionBlur}
+        {...(Platform.isTV || deviceType !== "tv" ? undefined : { onPress: handlePress })}
       >
         <View style={styles.inputContainer}>
           <View style={styles.titleContainer}>
@@ -116,14 +122,22 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
               }}
               selection={selection}
               onSelectionChange={onSelectionChange} // 可选
-
               onBlur={() => setIsInputFocused(false)}
+            />
+            <TextInput
+              style={[styles.input, styles.secondaryInput]}
+              value={cronPassword}
+              onChangeText={handleCronPasswordChange}
+              placeholder="Cron 密码（默认 cron_secure_password，可改）"
+              placeholderTextColor="#888"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
           </Animated.View>
         </View>
       </SettingsSection>
     );
-  }
+  },
 );
 
 APIConfigSection.displayName = "APIConfigSection";
@@ -169,5 +183,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 10,
     elevation: 5,
+  },
+  secondaryInput: {
+    marginTop: 10,
   },
 });

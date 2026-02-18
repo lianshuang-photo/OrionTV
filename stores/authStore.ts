@@ -4,8 +4,50 @@ import { api } from "@/services/api";
 import { useSettingsStore } from "./settingsStore";
 import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
+import { LoginCredentialsManager } from "@/services/storage";
 
-const logger = Logger.withTag('AuthStore');
+const logger = Logger.withTag("AuthStore");
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const validateSession = async (): Promise<boolean> => {
+  try {
+    await api.getPlayRecords();
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message === "UNAUTHORIZED") {
+      return false;
+    }
+
+    await sleep(400);
+    try {
+      await api.getPlayRecords();
+      return true;
+    } catch (retryError) {
+      if (retryError instanceof Error && retryError.message === "UNAUTHORIZED") {
+        return false;
+      }
+      throw retryError;
+    }
+  }
+};
+
+const tryAutoLogin = async (storageType: string | undefined): Promise<boolean> => {
+  const isLocalStorage = storageType === "localstorage";
+  const savedCredentials = await LoginCredentialsManager.get();
+
+  if (isLocalStorage) {
+    const loginResult = await api.login(undefined, savedCredentials?.password).catch(() => null);
+    return !!loginResult?.ok;
+  }
+
+  if (!savedCredentials?.username || !savedCredentials?.password) {
+    return false;
+  }
+
+  const loginResult = await api.login(savedCredentials.username, savedCredentials.password).catch(() => null);
+  return !!loginResult?.ok;
+};
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -26,58 +68,62 @@ const useAuthStore = create<AuthState>((set) => ({
       set({ isLoggedIn: false, isLoginModalVisible: false });
       return;
     }
+
+    set({ isLoginModalVisible: false });
+
     try {
-      // Wait for server config to be loaded if it's currently loading
       const settingsState = useSettingsStore.getState();
-      let serverConfig = settingsState.serverConfig;
-
-      // If server config is loading, wait a bit for it to complete
-      if (settingsState.isLoadingServerConfig) {
-        // Wait up to 3 seconds for server config to load
-        const maxWaitTime = 3000;
-        const checkInterval = 100;
-        let waitTime = 0;
-
-        while (waitTime < maxWaitTime) {
-          await new Promise(resolve => setTimeout(resolve, checkInterval));
-          waitTime += checkInterval;
-          const currentState = useSettingsStore.getState();
-          if (!currentState.isLoadingServerConfig) {
-            serverConfig = currentState.serverConfig;
-            break;
-          }
-        }
+      if (!settingsState.serverConfig?.StorageType) {
+        await settingsState.fetchServerConfig();
       }
 
-      if (!serverConfig?.StorageType) {
-        // Only show error if we're not loading and have tried to fetch the config
-        if (!settingsState.isLoadingServerConfig) {
-          Toast.show({ type: "error", text1: "请检查网络或者服务器地址是否可用" });
-        }
+      const refreshedSettings = useSettingsStore.getState();
+      const storageType = refreshedSettings.serverConfig?.StorageType;
+
+      if (!storageType) {
+        set({ isLoggedIn: false, isLoginModalVisible: false });
         return;
       }
 
-      const authToken = await AsyncStorage.getItem('authCookies');
-      if (!authToken) {
-        if (serverConfig && serverConfig.StorageType === "localstorage") {
-          const loginResult = await api.login().catch(() => {
-            set({ isLoggedIn: false, isLoginModalVisible: true });
-          });
-          if (loginResult && loginResult.ok) {
-            set({ isLoggedIn: true });
-          }
-        } else {
-          set({ isLoggedIn: false, isLoginModalVisible: true });
+      const authToken = await AsyncStorage.getItem("authCookies");
+      if (authToken) {
+        const isSessionValid = await validateSession();
+        if (isSessionValid) {
+          set({ isLoggedIn: true, isLoginModalVisible: false });
+          return;
         }
-      } else {
+
+        await AsyncStorage.setItem("authCookies", "");
+      }
+
+      const hasAutoLogin = await tryAutoLogin(storageType);
+      if (hasAutoLogin) {
         set({ isLoggedIn: true, isLoginModalVisible: false });
+        return;
+      }
+
+      if (storageType === "localstorage") {
+        set({ isLoggedIn: false, isLoginModalVisible: false });
+      } else {
+        Toast.show({ type: "error", text1: "请登录后继续使用" });
+        set({ isLoggedIn: false, isLoginModalVisible: true });
       }
     } catch (error) {
       logger.error("Failed to check login status:", error);
       if (error instanceof Error && error.message === "UNAUTHORIZED") {
+        const hasAutoLogin = await tryAutoLogin(useSettingsStore.getState().serverConfig?.StorageType);
+        if (hasAutoLogin) {
+          set({ isLoggedIn: true, isLoginModalVisible: false });
+          return;
+        }
         set({ isLoggedIn: false, isLoginModalVisible: true });
       } else {
-        set({ isLoggedIn: false });
+        const authToken = await AsyncStorage.getItem("authCookies");
+        if (authToken) {
+          set({ isLoggedIn: true, isLoginModalVisible: false });
+        } else {
+          set({ isLoggedIn: false, isLoginModalVisible: true });
+        }
       }
     }
   },

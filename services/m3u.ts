@@ -1,6 +1,7 @@
-import Logger from '@/utils/Logger';
+import Logger from "@/utils/Logger";
+import { api } from "@/services/api";
 
-const logger = Logger.withTag('M3U');
+const logger = Logger.withTag("M3U");
 
 export interface Channel {
   id: string;
@@ -12,14 +13,14 @@ export interface Channel {
 
 export const parseM3U = (m3uText: string): Channel[] => {
   const parsedChannels: Channel[] = [];
-  const lines = m3uText.split('\n');
+  const lines = m3uText.split("\n");
   let currentChannelInfo: Partial<Channel> | null = null;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('#EXTINF:')) {
+    if (trimmedLine.startsWith("#EXTINF:")) {
       currentChannelInfo = {}; // Start a new channel
-      const commaIndex = trimmedLine.lastIndexOf(',');
+      const commaIndex = trimmedLine.lastIndexOf(",");
       if (commaIndex !== -1) {
         currentChannelInfo.name = trimmedLine.substring(commaIndex + 1).trim();
         const attributesPart = trimmedLine.substring(8, commaIndex);
@@ -34,19 +35,19 @@ export const parseM3U = (m3uText: string): Channel[] => {
       } else {
         currentChannelInfo.name = trimmedLine.substring(8).trim();
       }
-    } else if (currentChannelInfo && trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.includes('://')) {
+    } else if (currentChannelInfo && trimmedLine && !trimmedLine.startsWith("#") && trimmedLine.includes("://")) {
       currentChannelInfo.url = trimmedLine;
       currentChannelInfo.id = currentChannelInfo.url; // Use URL as ID
-      
+
       // Ensure all required fields are present, providing defaults if necessary
       const finalChannel: Channel = {
         id: currentChannelInfo.id,
         url: currentChannelInfo.url,
-        name: currentChannelInfo.name || 'Unknown',
-        logo: currentChannelInfo.logo || '',
-        group: currentChannelInfo.group || 'Default',
+        name: currentChannelInfo.name || "Unknown",
+        logo: currentChannelInfo.logo || "",
+        group: currentChannelInfo.group || "Default",
       };
-      
+
       parsedChannels.push(finalChannel);
       currentChannelInfo = null; // Reset for the next channel
     }
@@ -68,19 +69,16 @@ export const fetchAndParseM3u = async (m3uUrl: string): Promise<Channel[]> => {
   }
 };
 
-export const getPlayableUrl = (originalUrl: string | null): string | null => {
+export const getPlayableUrl = (originalUrl: string | null, source?: string): string | null => {
   if (!originalUrl) {
     return null;
   }
-  // In React Native, we use the proxy for all http streams to avoid potential issues.
-  // if (originalUrl.toLowerCase().startsWith('http://')) {
-  //   // Use the baseURL from the existing api instance.
-  //   if (!api.baseURL) {
-  //       console.warn("API base URL is not set. Cannot create proxy URL.")
-  //       return originalUrl; // Fallback to original URL
-  //   }
-  //   return `${api.baseURL}/proxy?url=${encodeURIComponent(originalUrl)}`;
-  // }
-  // HTTPS streams can be played directly.
+
+  const isM3u8Url = /\.m3u8($|\?)/i.test(originalUrl);
+  if (isM3u8Url && api.baseURL) {
+    const sourceParam = source ? `&source=${encodeURIComponent(source)}` : "";
+    return `${api.baseURL}/api/proxy-m3u8?url=${encodeURIComponent(originalUrl)}${sourceParam}`;
+  }
+
   return originalUrl;
 };

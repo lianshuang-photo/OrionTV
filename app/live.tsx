@@ -88,7 +88,8 @@ export default function LiveScreen() {
     [getChannelFavoriteId],
   );
 
-  const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
+  const selectedChannelUrl =
+    channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url, selectedSourceKey) : null;
 
   const handleRefreshCurrentSource = useCallback(() => {
     if (!selectedSourceKey) {

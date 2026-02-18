@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Modal, View, TextInput, StyleSheet, ActivityIndicator, Alert, Keyboard, InteractionManager } from "react-native";
+import { Modal, View, TextInput, StyleSheet, ActivityIndicator, Keyboard } from "react-native";
 import { usePathname } from "expo-router";
 import Toast from "react-native-toast-message";
 import useAuthStore from "@/stores/authStore";
@@ -28,7 +28,7 @@ const LoginModal = () => {
   // Load saved credentials when modal opens
   useEffect(() => {
     if (isLoginModalVisible && !isSettingsPage) {
-            // 先确保键盘状态清理
+      // 先确保键盘状态清理
       Keyboard.dismiss();
 
       const loadCredentials = async () => {
@@ -94,38 +94,17 @@ const LoginModal = () => {
       await LoginCredentialsManager.save({ username, password });
 
       Toast.show({ type: "success", text1: "登录成功" });
-      // hideLoginModal();
-
-      // // Show disclaimer alert after successful login
-      // Alert.alert(
-      //   "免责声明",
-      //   "本应用仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。",
-      //   [{ text: "确定" }]
-      // );
-
-            // 在登录成功后清理状态，再显示 Alert
-      const hideAndAlert = () => {
-        hideLoginModal();
-        setIsModalReady(false);
-        Keyboard.dismiss();
-
-        setTimeout(() => {
-          Alert.alert(
-            "免责声明",
-            "本应用仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。",
-            [{ text: "确定" }]
-          );
-        }, 100);
-      };
-
-      // 使用 InteractionManager 确保 UI 稳定后再执行
-      InteractionManager.runAfterInteractions(hideAndAlert);
-
+      hideLoginModal();
+      setIsModalReady(false);
+      Keyboard.dismiss();
     } catch (error) {
+      const errorMessage =
+        error instanceof Error && error.message === "UNAUTHORIZED" ? "用户名或密码错误" : "请检查服务器地址和网络连接";
+
       Toast.show({
         type: "error",
         text1: "登录失败",
-        text2: error instanceof Error ? error.message : "用户名或密码错误",
+        text2: errorMessage,
       });
     } finally {
       setIsLoading(false);

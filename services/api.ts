@@ -198,6 +198,11 @@ export class API {
     return payload.data?.programs || [];
   }
 
+  async triggerCron(password: string = "mtvpls"): Promise<boolean> {
+    const response = await this._fetch(`/api/cron/${encodeURIComponent(password)}`);
+    return response.ok;
+  }
+
   async getFavorites(key?: string): Promise<Record<string, Favorite> | Favorite | null> {
     const url = key ? `/api/favorites?key=${encodeURIComponent(key)}` : "/api/favorites";
     const response = await this._fetch(url);
