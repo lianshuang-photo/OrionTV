@@ -11,6 +11,7 @@ const DEFAULT_CRON_PASSWORD = "cron_secure_password";
 interface SettingsState {
   apiBaseUrl: string;
   cronPassword: string;
+  vodProxyEnabled: boolean;
   m3uUrl: string;
   remoteInputEnabled: boolean;
   videoSource: {
@@ -26,6 +27,7 @@ interface SettingsState {
   fetchServerConfig: () => Promise<void>;
   setApiBaseUrl: (url: string) => void;
   setCronPassword: (password: string) => void;
+  setVodProxyEnabled: (enabled: boolean) => void;
   setM3uUrl: (url: string) => void;
   setRemoteInputEnabled: (enabled: boolean) => void;
   saveSettings: () => Promise<void>;
@@ -37,6 +39,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   apiBaseUrl: "",
   cronPassword: DEFAULT_CRON_PASSWORD,
+  vodProxyEnabled: true,
   m3uUrl: "",
   liveStreamSources: [],
   remoteInputEnabled: false,
@@ -52,6 +55,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({
       apiBaseUrl: settings.apiBaseUrl,
       cronPassword: settings.cronPassword || DEFAULT_CRON_PASSWORD,
+      vodProxyEnabled: settings.vodProxyEnabled !== false,
       m3uUrl: settings.m3uUrl,
       remoteInputEnabled: settings.remoteInputEnabled || false,
       videoSource: settings.videoSource || {
@@ -81,11 +85,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
   setApiBaseUrl: (url) => set({ apiBaseUrl: url }),
   setCronPassword: (password) => set({ cronPassword: password }),
+  setVodProxyEnabled: (enabled) => set({ vodProxyEnabled: enabled }),
   setM3uUrl: (url) => set({ m3uUrl: url }),
   setRemoteInputEnabled: (enabled) => set({ remoteInputEnabled: enabled }),
   setVideoSource: (config) => set({ videoSource: config }),
   saveSettings: async () => {
-    const { apiBaseUrl, cronPassword, m3uUrl, remoteInputEnabled, videoSource } = get();
+    const { apiBaseUrl, cronPassword, vodProxyEnabled, m3uUrl, remoteInputEnabled, videoSource } = get();
     const currentSettings = await SettingsManager.get();
     const currentApiBaseUrl = currentSettings.apiBaseUrl;
     let processedApiBaseUrl = apiBaseUrl.trim();
@@ -110,6 +115,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await SettingsManager.save({
       apiBaseUrl: processedApiBaseUrl,
       cronPassword: cronPassword.trim(),
+      vodProxyEnabled,
       m3uUrl,
       remoteInputEnabled,
       videoSource,

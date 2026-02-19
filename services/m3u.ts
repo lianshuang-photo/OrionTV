@@ -1,6 +1,6 @@
-import Logger from '@/utils/Logger';
+import Logger from "@/utils/Logger";
 
-const logger = Logger.withTag('M3U');
+const logger = Logger.withTag("M3U");
 
 export interface Channel {
   id: string;
@@ -12,14 +12,14 @@ export interface Channel {
 
 export const parseM3U = (m3uText: string): Channel[] => {
   const parsedChannels: Channel[] = [];
-  const lines = m3uText.split('\n');
+  const lines = m3uText.split("\n");
   let currentChannelInfo: Partial<Channel> | null = null;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('#EXTINF:')) {
+    if (trimmedLine.startsWith("#EXTINF:")) {
       currentChannelInfo = {}; // Start a new channel
-      const commaIndex = trimmedLine.lastIndexOf(',');
+      const commaIndex = trimmedLine.lastIndexOf(",");
       if (commaIndex !== -1) {
         currentChannelInfo.name = trimmedLine.substring(commaIndex + 1).trim();
         const attributesPart = trimmedLine.substring(8, commaIndex);
@@ -34,19 +34,19 @@ export const parseM3U = (m3uText: string): Channel[] => {
       } else {
         currentChannelInfo.name = trimmedLine.substring(8).trim();
       }
-    } else if (currentChannelInfo && trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.includes('://')) {
+    } else if (currentChannelInfo && trimmedLine && !trimmedLine.startsWith("#") && trimmedLine.includes("://")) {
       currentChannelInfo.url = trimmedLine;
       currentChannelInfo.id = currentChannelInfo.url; // Use URL as ID
-      
+
       // Ensure all required fields are present, providing defaults if necessary
       const finalChannel: Channel = {
         id: currentChannelInfo.id,
         url: currentChannelInfo.url,
-        name: currentChannelInfo.name || 'Unknown',
-        logo: currentChannelInfo.logo || '',
-        group: currentChannelInfo.group || 'Default',
+        name: currentChannelInfo.name || "Unknown",
+        logo: currentChannelInfo.logo || "",
+        group: currentChannelInfo.group || "Default",
       };
-      
+
       parsedChannels.push(finalChannel);
       currentChannelInfo = null; // Reset for the next channel
     }
@@ -83,4 +83,35 @@ export const getPlayableUrl = (originalUrl: string | null): string | null => {
   // }
   // HTTPS streams can be played directly.
   return originalUrl;
+};
+
+const isHttpUrl = (url: string | null): boolean => {
+  if (!url) return false;
+  return /^https?:\/\//i.test(url);
+};
+
+const isM3u8Url = (url: string | null): boolean => {
+  if (!url) return false;
+  return /\.m3u8($|\?)/i.test(url);
+};
+
+export const getAdFilteredVodUrl = (
+  originalUrl: string | null,
+  apiBaseUrl: string,
+  sourceKey: string,
+  proxyToken?: string,
+  vodProxyEnabled: boolean = true
+): string | null => {
+  if (!originalUrl || !apiBaseUrl || !sourceKey || !vodProxyEnabled) {
+    return originalUrl;
+  }
+
+  if (!isHttpUrl(originalUrl) || !isM3u8Url(originalUrl)) {
+    return originalUrl;
+  }
+
+  const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : "";
+  return `${apiBaseUrl}/api/proxy-m3u8?url=${encodeURIComponent(originalUrl)}&source=${encodeURIComponent(
+    sourceKey
+  )}${tokenParam}`;
 };

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef } from "react";
-import { View, TextInput, StyleSheet, Animated, Platform } from "react-native";
+import { View, TextInput, StyleSheet, Animated, Platform, Switch } from "react-native";
 import { useTVEventHandler } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { SettingsSection } from "./SettingsSection";
@@ -23,7 +23,15 @@ export interface APIConfigSectionRef {
 
 export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSectionProps>(
   ({ onChanged, onFocus, onBlur, onPress, hideDescription = false }, ref) => {
-    const { apiBaseUrl, cronPassword, setApiBaseUrl, setCronPassword, remoteInputEnabled } = useSettingsStore();
+    const {
+      apiBaseUrl,
+      cronPassword,
+      vodProxyEnabled,
+      setApiBaseUrl,
+      setCronPassword,
+      setVodProxyEnabled,
+      remoteInputEnabled,
+    } = useSettingsStore();
     const { serverUrl } = useRemoteControlStore();
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [isSectionFocused, setIsSectionFocused] = useState(false);
@@ -38,6 +46,11 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
 
     const handleCronPasswordChange = (value: string) => {
       setCronPassword(value);
+      onChanged();
+    };
+
+    const handleVodProxyToggle = (enabled: boolean) => {
+      setVodProxyEnabled(enabled);
       onChanged();
     };
 
@@ -65,7 +78,7 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
           inputRef.current?.focus();
         }
       },
-      [isSectionFocused],
+      [isSectionFocused]
     );
 
     const handlePress = () => {
@@ -133,11 +146,15 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
               autoCapitalize="none"
               autoCorrect={false}
             />
+            <View style={styles.toggleRow}>
+              <ThemedText style={styles.toggleLabel}>点播 M3U8 走后端代理</ThemedText>
+              <Switch value={vodProxyEnabled} onValueChange={handleVodProxyToggle} />
+            </View>
           </Animated.View>
         </View>
       </SettingsSection>
     );
-  },
+  }
 );
 
 APIConfigSection.displayName = "APIConfigSection";
@@ -186,5 +203,16 @@ const styles = StyleSheet.create({
   },
   secondaryInput: {
     marginTop: 10,
+  },
+  toggleRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    color: "#ddd",
   },
 });

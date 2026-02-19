@@ -33,6 +33,7 @@ export interface PlayerSettings {
 export interface AppSettings {
   apiBaseUrl: string;
   cronPassword?: string;
+  vodProxyEnabled?: boolean;
   remoteInputEnabled: boolean;
   videoSource: {
     enabledAll: boolean;
@@ -83,7 +84,7 @@ export class PlayerSettingsManager {
 
     const perfEnd = performance.now();
     logger.info(
-      `[PERF] PlayerSettingsManager.get END - took ${(perfEnd - perfStart).toFixed(2)}ms, found: ${!!result}`,
+      `[PERF] PlayerSettingsManager.get END - took ${(perfEnd - perfStart).toFixed(2)}ms, found: ${!!result}`
     );
 
     return result;
@@ -265,7 +266,9 @@ export class PlayRecordManager {
 
       const apiEnd = performance.now();
       logger.info(
-        `[PERF] API getPlayRecords END - took ${(apiEnd - apiStart).toFixed(2)}ms, records: ${Object.keys(apiRecords).length}`,
+        `[PERF] API getPlayRecords END - took ${(apiEnd - apiStart).toFixed(2)}ms, records: ${
+          Object.keys(apiRecords).length
+        }`
       );
     }
 
@@ -280,7 +283,9 @@ export class PlayRecordManager {
 
     const perfEnd = performance.now();
     logger.info(
-      `[PERF] PlayRecordManager.getAll END - took ${(perfEnd - perfStart).toFixed(2)}ms, total records: ${Object.keys(mergedRecords).length}`,
+      `[PERF] PlayRecordManager.getAll END - took ${(perfEnd - perfStart).toFixed(2)}ms, total records: ${
+        Object.keys(mergedRecords).length
+      }`
     );
 
     return mergedRecords;
@@ -389,6 +394,7 @@ export class SettingsManager {
     const defaultSettings: AppSettings = {
       apiBaseUrl: "",
       cronPassword: "cron_secure_password",
+      vodProxyEnabled: true,
       remoteInputEnabled: true,
       videoSource: {
         enabledAll: true,
