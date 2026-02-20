@@ -13,6 +13,7 @@ interface SettingsState {
   cronPassword: string;
   m3uUrl: string;
   remoteInputEnabled: boolean;
+  vodProxyEnabled: boolean;
   liveAdBlockEnabled: boolean;
   vodAdBlockEnabled: boolean;
   videoSource: {
@@ -30,6 +31,7 @@ interface SettingsState {
   setCronPassword: (password: string) => void;
   setM3uUrl: (url: string) => void;
   setRemoteInputEnabled: (enabled: boolean) => void;
+  setVodProxyEnabled: (enabled: boolean) => void;
   setLiveAdBlockEnabled: (enabled: boolean) => void;
   setVodAdBlockEnabled: (enabled: boolean) => void;
   saveSettings: () => Promise<void>;
@@ -43,6 +45,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   cronPassword: DEFAULT_CRON_PASSWORD,
   m3uUrl: "",
   remoteInputEnabled: false,
+  vodProxyEnabled: true,
   liveAdBlockEnabled: true,
   vodAdBlockEnabled: true,
   isModalVisible: false,
@@ -59,8 +62,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       cronPassword: settings.cronPassword || DEFAULT_CRON_PASSWORD,
       m3uUrl: settings.m3uUrl,
       remoteInputEnabled: settings.remoteInputEnabled || false,
+      vodProxyEnabled: settings.vodProxyEnabled ?? settings.vodAdBlockEnabled ?? true,
       liveAdBlockEnabled: settings.liveAdBlockEnabled ?? true,
-      vodAdBlockEnabled: settings.vodAdBlockEnabled ?? true,
+      vodAdBlockEnabled: settings.vodAdBlockEnabled ?? settings.vodProxyEnabled ?? true,
       videoSource: settings.videoSource || {
         enabledAll: true,
         sources: {},
@@ -90,11 +94,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setCronPassword: (password) => set({ cronPassword: password }),
   setM3uUrl: (url) => set({ m3uUrl: url }),
   setRemoteInputEnabled: (enabled) => set({ remoteInputEnabled: enabled }),
+  setVodProxyEnabled: (enabled) => set({ vodProxyEnabled: enabled, vodAdBlockEnabled: enabled }),
   setLiveAdBlockEnabled: (enabled) => set({ liveAdBlockEnabled: enabled }),
-  setVodAdBlockEnabled: (enabled) => set({ vodAdBlockEnabled: enabled }),
+  setVodAdBlockEnabled: (enabled) => set({ vodAdBlockEnabled: enabled, vodProxyEnabled: enabled }),
   setVideoSource: (config) => set({ videoSource: config }),
   saveSettings: async () => {
-    const { apiBaseUrl, cronPassword, m3uUrl, remoteInputEnabled, liveAdBlockEnabled, vodAdBlockEnabled, videoSource } = get();
+    const {
+      apiBaseUrl,
+      cronPassword,
+      m3uUrl,
+      remoteInputEnabled,
+      vodProxyEnabled,
+      liveAdBlockEnabled,
+      vodAdBlockEnabled,
+      videoSource,
+    } = get();
     const currentSettings = await SettingsManager.get();
     const currentApiBaseUrl = currentSettings.apiBaseUrl;
     let processedApiBaseUrl = apiBaseUrl.trim();
@@ -121,6 +135,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       cronPassword: cronPassword.trim(),
       m3uUrl,
       remoteInputEnabled,
+      vodProxyEnabled,
       liveAdBlockEnabled,
       vodAdBlockEnabled,
       videoSource,
