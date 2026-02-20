@@ -4,18 +4,39 @@ import { AVPlaybackStatus, Video } from "expo-av";
 import { RefObject } from "react";
 import { PlayRecord, PlayRecordManager, PlayerSettingsManager } from "@/services/storage";
 import useDetailStore, { episodesSelectorBySource } from "./detailStore";
-import { getAdFilteredVodUrl } from "@/services/m3u";
+import { getAdFilteredVodUrl, resolveM3u8Url } from "@/services/m3u";
 import { useSettingsStore } from "@/stores/settingsStore";
 import Logger from "@/utils/Logger";
 
 const logger = Logger.withTag("PlayerStore");
 
-const buildVodEpisodes = (episodes: string[], sourceKey: string, apiBaseUrl: string, vodProxyEnabled: boolean) =>
-  episodes.map((ep, index) => ({
-    url: getAdFilteredVodUrl(ep, apiBaseUrl, sourceKey, undefined, vodProxyEnabled) || ep,
-    originalUrl: ep,
-    title: `第 ${index + 1} 集`,
-  }));
+const buildVodEpisodes = async (
+  episodes: string[],
+  sourceKey: string,
+  apiBaseUrl: string,
+  vodProxyEnabled: boolean
+): Promise<Array<{ url: string; originalUrl: string; title: string }>> => {
+  const results = await Promise.all(
+    episodes.map(async (ep, index) => {
+      let url = ep;
+      if (vodProxyEnabled && apiBaseUrl && sourceKey) {
+        try {
+          // Resolve nested M3U8 URLs client-side to avoid backend's 0.0.0.0 issue
+          url = await resolveM3u8Url(ep, apiBaseUrl, sourceKey);
+        } catch (error) {
+          logger.info(`Failed to resolve M3U8 for episode ${index + 1}, using original URL`, error);
+          url = ep;
+        }
+      }
+      return {
+        url,
+        originalUrl: ep,
+        title: `第 ${index + 1} 集`,
+      };
+    })
+  );
+  return results;
+};
 
 interface Episode {
   url: string;
@@ -235,7 +256,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
 
       const episodesMappingStart = performance.now();
       const { apiBaseUrl, vodProxyEnabled } = useSettingsStore.getState();
-      const mappedEpisodes = buildVodEpisodes(episodes, detail.source, apiBaseUrl, vodProxyEnabled);
+      const mappedEpisodes = await buildVodEpisodes(episodes, detail.source, apiBaseUrl, vodProxyEnabled);
       const episodesMappingEnd = performance.now();
       logger.info(
         `[PERF] Episodes mapping (${episodes.length} episodes) took ${(
@@ -559,7 +580,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
       const newEpisodes = fallbackSource.episodes || [];
       if (newEpisodes.length > currentEpisodeIndex) {
         const { apiBaseUrl, vodProxyEnabled } = useSettingsStore.getState();
-        const mappedEpisodes = buildVodEpisodes(newEpisodes, fallbackSource.source, apiBaseUrl, vodProxyEnabled);
+        const mappedEpisodes = await buildVodEpisodes(newEpisodes, fallbackSource.source, apiBaseUrl, vodProxyEnabled);
 
         set({
           episodes: mappedEpisodes,

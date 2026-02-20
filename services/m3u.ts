@@ -95,6 +95,67 @@ const isM3u8Url = (url: string | null): boolean => {
   return /\.m3u8($|\?)/i.test(url);
 };
 
+/**
+ * Resolve nested M3U8 URLs by fetching and processing them client-side
+ * This avoids the backend's 0.0.0.0 issue
+ */
+export const resolveM3u8Url = async (
+  url: string,
+  apiBaseUrl: string,
+  sourceKey: string,
+  proxyToken?: string
+): Promise<string> => {
+  try {
+    // Fetch the master M3U8
+    const response = await fetch(url);
+    if (!response.ok) {
+      logger.info(`Failed to fetch M3U8: ${response.statusText}`);
+      return url;
+    }
+
+    const content = await response.text();
+    const lines = content.split("\n");
+
+    // Check if this is a master playlist (contains EXT-X-STREAM-INF)
+    const hasMasterPlaylist = lines.some((line) => line.includes("#EXT-X-STREAM-INF"));
+
+    if (hasMasterPlaylist) {
+      // Find the nested M3U8 URL (usually the line after EXT-X-STREAM-INF)
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes("#EXT-X-STREAM-INF") && i + 1 < lines.length) {
+          let nestedUrl = lines[i + 1].trim();
+
+          // Convert relative URL to absolute
+          if (!nestedUrl.startsWith("http://") && !nestedUrl.startsWith("https://")) {
+            const baseUrl = new URL(url);
+            if (nestedUrl.startsWith("/")) {
+              nestedUrl = `${baseUrl.protocol}//${baseUrl.host}${nestedUrl}`;
+            } else {
+              const baseDir = baseUrl.href.substring(0, baseUrl.href.lastIndexOf("/") + 1);
+              nestedUrl = new URL(nestedUrl, baseDir).href;
+            }
+          }
+
+          // Return the nested M3U8 URL with proxy
+          const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : "";
+          return `${apiBaseUrl}/api/proxy-m3u8?url=${encodeURIComponent(nestedUrl)}&source=${encodeURIComponent(
+            sourceKey
+          )}${tokenParam}`;
+        }
+      }
+    }
+
+    // If not a master playlist, proxy it directly
+    const tokenParam = proxyToken ? `&token=${encodeURIComponent(proxyToken)}` : "";
+    return `${apiBaseUrl}/api/proxy-m3u8?url=${encodeURIComponent(url)}&source=${encodeURIComponent(
+      sourceKey
+    )}${tokenParam}`;
+  } catch (error) {
+    logger.info("Error resolving M3U8 URL:", error);
+    return url;
+  }
+};
+
 export const getAdFilteredVodUrl = (
   originalUrl: string | null,
   apiBaseUrl: string,
