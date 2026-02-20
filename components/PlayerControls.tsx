@@ -7,6 +7,7 @@ import { MediaButton } from "@/components/MediaButton";
 import usePlayerStore from "@/stores/playerStore";
 import useDetailStore from "@/stores/detailStore";
 import { useSources } from "@/stores/sourceStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 interface PlayerControlsProps {
   showControls: boolean;
@@ -29,12 +30,14 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     setShowSpeedModal,
     setIntroEndTime,
     setOutroStartTime,
+    refreshEpisodeUrls,
     introEndTime,
     outroStartTime,
   } = usePlayerStore();
 
   const { detail } = useDetailStore();
   const resources = useSources();
+  const { vodAdBlockEnabled, setVodAdBlockEnabled } = useSettingsStore();
 
   const videoTitle = detail?.title || "";
   const currentEpisode = episodes[currentEpisodeIndex];
@@ -55,6 +58,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     if (hasNextEpisode) {
       playEpisode(currentEpisodeIndex + 1);
     }
+  };
+
+  const onToggleVodAdBlock = () => {
+    setVodAdBlockEnabled(!vodAdBlockEnabled);
+    refreshEpisodeUrls();
   };
 
   return (
@@ -113,6 +121,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
 
           <MediaButton onPress={() => setShowSpeedModal(true)} timeLabel={playbackRate !== 1.0 ? `${playbackRate}x` : undefined}>
             <Gauge color="white" size={24} />
+          </MediaButton>
+
+          <MediaButton onPress={onToggleVodAdBlock} isSelected={vodAdBlockEnabled}>
+            <View style={[styles.adBlockIcon, vodAdBlockEnabled ? styles.adBlockIconEnabled : styles.adBlockIconDisabled]}>
+              <Text style={styles.adBlockIconText}>AD</Text>
+            </View>
           </MediaButton>
 
           <MediaButton onPress={() => setShowSourceModal(true)}>
@@ -204,5 +218,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  adBlockIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.4)",
+  },
+  adBlockIconEnabled: {
+    backgroundColor: "rgba(34, 197, 94, 0.28)",
+  },
+  adBlockIconDisabled: {
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+  },
+  adBlockIconText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
 });

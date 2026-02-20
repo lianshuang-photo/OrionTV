@@ -60,6 +60,7 @@ const useDetailStore = create<DetailState>((set, get) => ({
       error: null,
       allSourcesLoaded: false,
       controller: newController,
+      failedSources: new Set(),
     });
 
     const { videoSource } = useSettingsStore.getState();

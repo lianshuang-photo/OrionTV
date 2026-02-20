@@ -26,3 +26,11 @@ web/**
 .roomodes
 yarn-errors.log
 coverage/
+
+#build
+android/.gradle/
+.gradle*/
+*tmp
+
+#prompt
+Work.md

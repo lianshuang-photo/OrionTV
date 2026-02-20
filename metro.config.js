@@ -1,8 +1,8 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require("expo/metro-config");
+const fs = require("fs");
 const path = require("path");
 
-// Find the project and workspace directories
 // eslint-disable-next-line no-undef
 const projectRoot = __dirname;
 
@@ -25,16 +25,22 @@ const config = getDefaultConfig(projectRoot);
 //   config.resolver.sourceExts = tvSourceExts;
 // }
 
-// This can be replaced with `find-yarn-workspace-root`
 const monorepoRoot = path.resolve(projectRoot, "../..");
+const monorepoPackageJson = path.join(monorepoRoot, "package.json");
+const isWorkspaceRoot =
+  monorepoRoot !== projectRoot &&
+  monorepoRoot !== path.parse(monorepoRoot).root &&
+  fs.existsSync(monorepoPackageJson);
 
-// 1. Watch all files within the monorepo
-config.watchFolders = [monorepoRoot];
-// 2. Let Metro know where to resolve packages and in what order
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, "node_modules"),
-  path.resolve(monorepoRoot, "node_modules"),
-];
+config.watchFolders = isWorkspaceRoot ? [monorepoRoot] : [];
+
+const nodeModulesPaths = [path.resolve(projectRoot, "node_modules")];
+const monorepoNodeModules = path.resolve(monorepoRoot, "node_modules");
+if (isWorkspaceRoot && fs.existsSync(monorepoNodeModules)) {
+  nodeModulesPaths.push(monorepoNodeModules);
+}
+
+config.resolver.nodeModulesPaths = nodeModulesPaths;
 config.resolver.disableHierarchicalLookup = true;
 
 module.exports = config;

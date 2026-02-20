@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, FlatList, StyleSheet, ActivityIndicator, Modal, useTVEventHandler, HWEvent, Text } from "react-native";
+import type { AVPlaybackStatus } from "expo-av";
 import LivePlayer from "@/components/LivePlayer";
-import { getPlayableUrl } from "@/services/m3u";
+import { getAdFilteredLiveUrl, getLegacyAdFilteredLiveUrl, getPlayableUrl } from "@/services/m3u";
 import { ThemedView } from "@/components/ThemedView";
 import { StyledButton } from "@/components/StyledButton";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -15,8 +16,10 @@ import { LiveFavoriteManager } from "@/services/storage";
 
 const FAVORITES_GROUP_NAME = "收藏";
 
+const isSupportedLiveUrl = (url: string) => /^https?:\/\//i.test(url || "");
+
 export default function LiveScreen() {
-  const { apiBaseUrl } = useSettingsStore();
+  const { apiBaseUrl, liveAdBlockEnabled, setLiveAdBlockEnabled } = useSettingsStore();
 
   // 响应式布局配置
   const responsiveConfig = useResponsiveLayout();
@@ -44,18 +47,16 @@ export default function LiveScreen() {
   const applyChannels = useCallback(
     (nextChannels: LiveChannel[], sourceKey: string, nextFavoriteMap: Record<string, boolean>) => {
       setChannels(nextChannels);
+      setLoadError((prev) => (prev.startsWith("当前频道播放失败") ? "" : prev));
 
-      const groups: Record<string, LiveChannel[]> = nextChannels.reduce(
-        (acc, channel) => {
-          const groupName = channel.group || "Other";
-          if (!acc[groupName]) {
-            acc[groupName] = [];
-          }
-          acc[groupName].push(channel);
-          return acc;
-        },
-        {} as Record<string, LiveChannel[]>,
-      );
+      const groups: Record<string, LiveChannel[]> = nextChannels.reduce((acc, channel) => {
+        const groupName = channel.group || "Other";
+        if (!acc[groupName]) {
+          acc[groupName] = [];
+        }
+        acc[groupName].push(channel);
+        return acc;
+      }, {} as Record<string, LiveChannel[]>);
 
       const favoriteChannels = nextChannels.filter((channel) => {
         const favoriteKey = `${sourceKey}+${getChannelFavoriteId(channel)}`;
@@ -85,10 +86,23 @@ export default function LiveScreen() {
         setChannelTitle(null);
       }
     },
-    [getChannelFavoriteId],
+    [getChannelFavoriteId]
   );
 
-  const selectedChannelUrl = channels.length > 0 ? getPlayableUrl(channels[currentChannelIndex].url) : null;
+  const currentChannel = channels[currentChannelIndex];
+  const selectedChannelUrl = currentChannel ? getPlayableUrl(currentChannel.url) : null;
+  const selectedChannelAdFilteredUrl = currentChannel
+    ? getAdFilteredLiveUrl(currentChannel.url, apiBaseUrl, selectedSourceKey)
+    : null;
+  const selectedChannelLegacyAdFilteredUrl = currentChannel
+    ? getLegacyAdFilteredLiveUrl(currentChannel.url, apiBaseUrl, selectedSourceKey)
+    : null;
+  const streamCandidates = liveAdBlockEnabled
+    ? [selectedChannelAdFilteredUrl, selectedChannelLegacyAdFilteredUrl, selectedChannelUrl]
+    : [selectedChannelUrl, selectedChannelAdFilteredUrl, selectedChannelLegacyAdFilteredUrl];
+  const uniqueStreamCandidates = Array.from(new Set(streamCandidates.filter((url): url is string => !!url)));
+  const primaryStreamUrl = uniqueStreamCandidates[0] || null;
+  const fallbackStreamUrls = uniqueStreamCandidates.slice(1);
 
   const handleRefreshCurrentSource = useCallback(() => {
     if (!selectedSourceKey) {
@@ -101,6 +115,10 @@ export default function LiveScreen() {
       return nextCache;
     });
   }, [selectedSourceKey]);
+
+  const toggleLiveAdBlock = useCallback(() => {
+    setLiveAdBlockEnabled(!liveAdBlockEnabled);
+  }, [liveAdBlockEnabled, setLiveAdBlockEnabled]);
 
   useEffect(() => {
     const loadSources = async () => {
@@ -135,12 +153,29 @@ export default function LiveScreen() {
           return;
         }
 
-        setSelectedSourceKey((prev) => {
-          if (prev && sources.some((source) => source.key === prev)) {
-            return prev;
+        const preloadedCache: Record<string, LiveChannel[]> = {};
+        let firstPlayableSourceKey = sources[0].key;
+
+        for (const source of sources) {
+          try {
+            const sourceChannels = await api.getLiveChannels(source.key);
+            const supportedChannels = sourceChannels.filter((channel) => isSupportedLiveUrl(channel.url));
+            preloadedCache[source.key] = supportedChannels;
+
+            if (supportedChannels.length > 0) {
+              firstPlayableSourceKey = source.key;
+              break;
+            }
+          } catch {
+            preloadedCache[source.key] = [];
           }
-          return sources[0].key;
-        });
+        }
+
+        setChannelCache((prev) => ({
+          ...prev,
+          ...preloadedCache,
+        }));
+        setSelectedSourceKey(firstPlayableSourceKey);
       } catch {
         setLoadError("直播源加载失败，请检查网络或登录状态");
       } finally {
@@ -174,11 +209,17 @@ export default function LiveScreen() {
 
       setIsLoading(true);
       try {
-        const nextChannels = await api.getLiveChannels(selectedSourceKey);
+        const sourceChannels = await api.getLiveChannels(selectedSourceKey);
+        const nextChannels = sourceChannels.filter((channel) => isSupportedLiveUrl(channel.url));
         setChannelCache((prev) => ({
           ...prev,
           [selectedSourceKey]: nextChannels,
         }));
+
+        if (sourceChannels.length > 0 && nextChannels.length === 0) {
+          setLoadError("当前源为组播/非HTTP链接，设备不支持，请切换其他直播源");
+        }
+
         applyChannels(nextChannels, selectedSourceKey, nextFavoriteMap);
       } catch {
         setLoadError("频道加载失败，请稍后重试");
@@ -209,9 +250,20 @@ export default function LiveScreen() {
     titleTimer.current = setTimeout(() => setChannelTitle(null), 3000);
   };
 
+  const handlePlayerPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (status.isLoaded && status.isPlaying) {
+      setLoadError((prev) => (prev.startsWith("当前频道播放失败") ? "" : prev));
+    }
+  }, []);
+
+  const handlePlayerPlaybackFailure = useCallback(() => {
+    setLoadError("当前频道播放失败，请手动重试或切换频道");
+  }, []);
+
   const handleSelectChannel = (channel: LiveChannel) => {
     const globalIndex = channels.findIndex((c) => c.id === channel.id);
     if (globalIndex !== -1) {
+      setLoadError("");
       setCurrentChannelIndex(globalIndex);
       showChannelTitle(channel.name);
       setIsChannelListVisible(false);
@@ -244,7 +296,7 @@ export default function LiveScreen() {
       setFavoriteMap(nextFavoriteMap);
       applyChannels(channels, selectedSourceKey, nextFavoriteMap);
     },
-    [selectedSourceKey, getChannelFavoriteId, applyChannels, channels],
+    [selectedSourceKey, getChannelFavoriteId, applyChannels, channels]
   );
 
   const changeChannel = useCallback(
@@ -254,10 +306,11 @@ export default function LiveScreen() {
         direction === "next"
           ? (currentChannelIndex + 1) % channels.length
           : (currentChannelIndex - 1 + channels.length) % channels.length;
+      setLoadError("");
       setCurrentChannelIndex(newIndex);
       showChannelTitle(channels[newIndex].name);
     },
-    [channels, currentChannelIndex],
+    [channels, currentChannelIndex]
   );
 
   const handleTVEvent = useCallback(
@@ -268,7 +321,7 @@ export default function LiveScreen() {
       else if (event.eventType === "left") changeChannel("prev");
       else if (event.eventType === "right") changeChannel("next");
     },
-    [changeChannel, isChannelListVisible, deviceType],
+    [changeChannel, isChannelListVisible, deviceType]
   );
 
   useTVEventHandler(deviceType === "tv" ? handleTVEvent : () => {});
@@ -278,7 +331,23 @@ export default function LiveScreen() {
 
   const renderLiveContent = () => (
     <>
-      <LivePlayer streamUrl={selectedChannelUrl} channelTitle={channelTitle} onPlaybackStatusUpdate={() => {}} />
+      <LivePlayer
+        streamUrl={primaryStreamUrl}
+        fallbackStreamUrls={fallbackStreamUrls}
+        channelTitle={channelTitle}
+        onPlaybackStatusUpdate={handlePlayerPlaybackStatusUpdate}
+        onPlaybackFailure={handlePlayerPlaybackFailure}
+      />
+      {deviceType !== "tv" && (
+        <View style={dynamicStyles.mobileActionBar}>
+          <StyledButton
+            text="频道列表"
+            onPress={() => setIsChannelListVisible(true)}
+            style={dynamicStyles.mobileActionButton}
+            textStyle={dynamicStyles.mobileActionButtonText}
+          />
+        </View>
+      )}
       <Modal
         animationType="slide"
         transparent={true}
@@ -310,6 +379,23 @@ export default function LiveScreen() {
                 style={dynamicStyles.refreshButton}
                 textStyle={dynamicStyles.refreshButtonText}
               />
+              <StyledButton
+                onPress={toggleLiveAdBlock}
+                isSelected={liveAdBlockEnabled}
+                style={dynamicStyles.adBlockButton}
+              >
+                <View style={dynamicStyles.adBlockButtonContent}>
+                  <View
+                    style={[
+                      dynamicStyles.adBlockIcon,
+                      liveAdBlockEnabled ? dynamicStyles.adBlockIconEnabled : dynamicStyles.adBlockIconDisabled,
+                    ]}
+                  >
+                    <Text style={dynamicStyles.adBlockIconText}>AD</Text>
+                  </View>
+                  <Text style={dynamicStyles.adBlockText}>{liveAdBlockEnabled ? "去广告开" : "去广告关"}</Text>
+                </View>
+              </StyledButton>
             </View>
             {!!loadError && <Text style={dynamicStyles.errorText}>{loadError}</Text>}
             <View style={dynamicStyles.listContainer}>
@@ -339,7 +425,9 @@ export default function LiveScreen() {
                     keyExtractor={(item, index) => `${item.id}-${item.group}-${index}`}
                     renderItem={({ item }) => (
                       <StyledButton
-                        text={`${favoriteMap[`${selectedSourceKey}+${getChannelFavoriteId(item)}`] ? "★ " : ""}${item.name || "Unknown Channel"}`}
+                        text={`${favoriteMap[`${selectedSourceKey}+${getChannelFavoriteId(item)}`] ? "★ " : ""}${
+                          item.name || "Unknown Channel"
+                        }`}
                         onPress={() => handleSelectChannel(item)}
                         onLongPress={() => toggleChannelFavorite(item)}
                         isSelected={channels[currentChannelIndex]?.id === item.id}
@@ -433,6 +521,42 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     refreshButtonText: {
       fontSize: isMobile ? 14 : 12,
     },
+    adBlockButton: {
+      marginLeft: spacing / 2,
+      minHeight: isMobile ? minTouchTarget * 0.8 : undefined,
+      paddingHorizontal: spacing / 2,
+      paddingVertical: isMobile ? minTouchTarget / 5 : 6,
+    },
+    adBlockButtonContent: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "center",
+    },
+    adBlockIcon: {
+      alignItems: "center",
+      borderRadius: 10,
+      height: 20,
+      justifyContent: "center",
+      width: 20,
+    },
+    adBlockIconEnabled: {
+      backgroundColor: "rgba(34, 197, 94, 0.25)",
+    },
+    adBlockIconDisabled: {
+      backgroundColor: "rgba(255, 255, 255, 0.18)",
+    },
+    adBlockIconText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "800",
+      lineHeight: 12,
+    },
+    adBlockText: {
+      color: "#ffffff",
+      fontSize: isMobile ? 13 : 12,
+      fontWeight: "600",
+      marginLeft: 6,
+    },
     errorText: {
       color: "#ff8f8f",
       fontSize: isMobile ? 13 : 12,
@@ -475,6 +599,24 @@ const createResponsiveStyles = (deviceType: string, spacing: number) => {
     },
     channelItemText: {
       fontSize: isMobile ? 14 : 12,
+    },
+    mobileActionBar: {
+      position: "absolute",
+      top: spacing,
+      right: spacing,
+      zIndex: 20,
+    },
+    mobileActionButton: {
+      paddingHorizontal: spacing,
+      paddingVertical: isMobile ? minTouchTarget / 5 : 8,
+      minHeight: isMobile ? minTouchTarget * 0.8 : undefined,
+      backgroundColor: "rgba(0, 0, 0, 0.72)",
+      borderWidth: 1,
+      borderColor: "rgba(255, 255, 255, 0.2)",
+    },
+    mobileActionButtonText: {
+      color: "#ffffff",
+      fontSize: isMobile ? 13 : 12,
     },
   });
 };
